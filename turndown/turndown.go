@@ -3,13 +3,20 @@ package turndown
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	v1b1 "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+)
+
+const (
+	KubecostTurnDownJobSuspend = "kubecost.kubernetes.io/job-suspend"
+	KubecostTurnDownTaintKey   = "CriticalAddonsOnly"
 )
 
 // TurndownManager is an implementation prototype for an object capable of managing
@@ -95,18 +102,20 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return err
 	}
 
-	// Patch the Node with the kubecost-turndown taint
+	// Patch the Node with the kubecost turndown taint
+	// Instead of using a custom taint here, we use 'CriticalAddonsOnly', which
+	// will allow kube-dns to continue to schedule on the node (required)
 	node := nodeList.Items[0]
 	taints := node.Spec.Taints
 	for _, taint := range taints {
-		if taint.Key == "kubecost-turndown" {
+		if taint.Key == KubecostTurnDownTaintKey {
 			return nil
 		}
 	}
 
 	oldData, err := json.Marshal(node)
 	node.Spec.Taints = append(taints, v1.Taint{
-		Key:    "kubecost-turndown",
+		Key:    KubecostTurnDownTaintKey,
 		Value:  "true",
 		Effect: v1.TaintEffectNoSchedule,
 	})
@@ -124,6 +133,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	klog.V(3).Infoln("Node Taint was successfully added for kubecost-turndown.")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
+	// TODO: This should use the actual deployment namespace instead of "kubecost"
 	deployment, err := ktdm.client.AppsV1().Deployments("kubecost").Get("kubecost-turndown", metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -139,6 +149,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	if err != nil {
 		return err
 	}
+	// TODO: Use actual deployment namespace instead of "kubecost"
 	_, err = ktdm.client.AppsV1().Deployments("kubecost").Patch(deployment.Name, types.MergePatchType, patch)
 	if err != nil {
 		return err
@@ -149,35 +160,110 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	return nil
 }
 
-func (ktdm *KubernetesTurndownManager) AddKubeDNSTolerations() error {
-	deployment, err := ktdm.client.AppsV1().Deployments("kube-system").Get("kube-dns", metav1.GetOptions{})
+func (ktdm *KubernetesTurndownManager) SuspendJobs() error {
+	jobsList, err := ktdm.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
-	tolerations := deployment.Spec.Template.Spec.Tolerations
-	for _, toleration := range tolerations {
-		if toleration.Key == "kubecost-turndown" {
-			return nil
+
+	for _, job := range jobsList.Items {
+		err := ktdm.SuspendJob(job)
+		if err != nil {
+			klog.V(3).Infof("Failed to suspend CronJob: %s", err.Error())
 		}
 	}
 
-	oldData, err := json.Marshal(deployment)
-	deployment.Spec.Template.Spec.Tolerations = append(tolerations, v1.Toleration{
-		Key:      "kubecost-turndown",
-		Operator: v1.TolerationOpExists,
-	})
-	newData, err := json.Marshal(deployment)
+	return nil
+}
 
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, deployment)
-	if err != nil {
-		return err
-	}
-	_, err = ktdm.client.AppsV1().Deployments("kube-system").Patch(deployment.Name, types.MergePatchType, patch)
+func (ktdm *KubernetesTurndownManager) ResumeJobs() error {
+	jobsList, err := ktdm.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
-	klog.V(3).Infoln("Kube-DNS Successfully added tolerations for kubecost-turndown.")
+	for _, job := range jobsList.Items {
+		err := ktdm.ResumeJob(job)
+		if err != nil {
+			klog.V(3).Infof("Failed to resume CronJob: %s", err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (ktdm *KubernetesTurndownManager) SuspendJob(job v1b1.CronJob) error {
+	oldData, err := json.Marshal(job)
+
+	var previousValue *bool
+	if job.Spec.Suspend != nil {
+		previousValue = job.Spec.Suspend
+	}
+
+	// Suspend the job
+	value := true
+	job.Spec.Suspend = &value
+
+	// If there wasn't a previous value set, no need to set flag
+	if previousValue != nil {
+		if job.Annotations == nil {
+			job.Annotations = map[string]string{
+				KubecostTurnDownJobSuspend: fmt.Sprintf("%t", *previousValue),
+			}
+		} else {
+			job.Annotations[KubecostTurnDownJobSuspend] = fmt.Sprintf("%t", *previousValue)
+		}
+	}
+
+	newData, err := json.Marshal(job)
+	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
+	if err != nil {
+		klog.Errorf("Couldn't set CronJob to suspended: %s", err.Error())
+		return err
+	}
+
+	_, err = ktdm.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
+	if err != nil {
+		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// Sets the deployment pods to a safe-evict state, updates annotation flags
+func (ktdm *KubernetesTurndownManager) ResumeJob(job v1b1.CronJob) error {
+	oldData, err := json.Marshal(job)
+
+	var suspend bool = false
+	if job.Annotations != nil {
+		// If there wasn't an entry, remove the pod safe evict flag
+		suspendEntry, ok := job.Annotations[KubecostTurnDownJobSuspend]
+		if ok {
+			suspend, err = strconv.ParseBool(suspendEntry)
+			if err != nil {
+				return err
+			}
+
+			delete(job.Annotations, KubecostTurnDownJobSuspend)
+		}
+	}
+
+	job.Spec.Suspend = &suspend
+
+	newData, err := json.Marshal(job)
+	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
+	if err != nil {
+		klog.Errorf("Couldn't set CronJob to resume: %s", err.Error())
+		return err
+	}
+
+	_, err = ktdm.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
+	if err != nil {
+		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
+		return err
+	}
+
 	return nil
 }
 
@@ -188,20 +274,18 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 		return err
 	}
 
-	// 2a. Use provided to generate expected node pools associated with this cluster
+	// 2a. Suspend All Cron Jobs
+	err = ktdm.SuspendJobs()
+	if err != nil {
+		return err
+	}
+
+	// 2b. Use provided to generate expected node pools associated with this cluster
 	poolCollections, err := ktdm.provider.GetZoneNodePools(nodes)
 	if err != nil {
 		return err
 	}
 	nodePools, err := ktdm.provider.GetNodePools(poolCollections)
-	if err != nil {
-		return err
-	}
-
-	// 2b. Modify Kube-DNS Deployment with tolerations for Our Node
-	// This step is necessary to ensure that once the main nodepool is
-	// drained, kube-dns can be rescheduled back onto the turndown node
-	err = ktdm.AddKubeDNSTolerations()
 	if err != nil {
 		return err
 	}
@@ -214,7 +298,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		klog.V(1).Infof("Draining Node: %s", n.Name)
+		klog.V(3).Infof("Draining Node: %s", n.Name)
 		draininator := NewDraininator(ktdm.client, n.Name)
 
 		err = draininator.Drain()
@@ -247,12 +331,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 }
 
 func (ktdm *KubernetesTurndownManager) loadNodePools() error {
-	node, err := ktdm.client.CoreV1().Nodes().Get(ktdm.currentNode, metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-
-	pools, err := ktdm.provider.GetClusterNodePools(node)
+	pools, err := ktdm.provider.GetNodePoolList()
 	if err != nil {
 		return err
 	}
@@ -284,6 +363,12 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	// No need to uncordone nodes here because they were complete removed and now added back
 	// Reset node pools on instance
 	ktdm.nodePools = nil
+
+	// Resume any suspended jobs
+	err = ktdm.ResumeJobs()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

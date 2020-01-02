@@ -184,6 +184,6 @@ spec:
         persistentVolumeClaim:
             claimName: kubecost-turndown
       tolerations:
-        - key: kubecost-turndown
+        - key: CriticalAddonsOnly
           operator: Exists
           effect: NoSchedule

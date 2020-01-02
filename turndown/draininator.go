@@ -24,6 +24,13 @@ import (
 	"k8s.io/klog"
 )
 
+const (
+	ClusterAutoScalerSafeEvict    = "cluster-autoscaler.kubernetes.io/safe-to-evict"
+	KubecostTurnDownReplicas      = "kubecost.kubernetes.io/turn-down-replicas"
+	KubecostTurnDownRollout       = "kubecost.kubernetes.io/turn-down-rollout"
+	KubecostTurnDownSafeEvictFlag = "kubecost.kubernetes.io/safe-evict"
+)
+
 // Draininator is the type used to drain a specific kubernetes node. Much like
 // the "drain" functionality provided by kubectl, this implementation will cordon
 // the node, then aggressively force pod evictions, ignoring daemonset pods, and

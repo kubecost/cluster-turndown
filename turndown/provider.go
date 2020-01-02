@@ -15,8 +15,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
-	//_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-
 	"cloud.google.com/go/compute/metadata"
 	gke "cloud.google.com/go/container/apiv1"
 
@@ -40,6 +38,7 @@ type ComputeProvider interface {
 	IsTurndownNodePool() bool
 	CreateSingletonNodePool() error
 	SetServiceAccount(key string) error
+	GetNodePoolList() ([]*NodePool, error)
 	GetZoneNodePools(nodes *v1.NodeList) ([]*NodePoolCollection, error)
 	GetNodePools([]*NodePoolCollection) ([]*NodePool, error)
 	GetClusterNodePools(*v1.Node) ([]*NodePool, error)
@@ -261,6 +260,40 @@ func (p *GKEProvider) GetNodePools(nodePoolCollections []*NodePoolCollection) ([
 	return poolCounts, nil
 }
 
+func (p *GKEProvider) GetNodePoolList() ([]*NodePool, error) {
+	ctx := context.TODO()
+
+	projectID := getProjectID()
+	zone := getZone()
+	cluster := getClusterID()
+
+	req := &container.ListNodePoolsRequest{
+		ProjectId: projectID,
+		Zone:      zone,
+		ClusterId: cluster,
+	}
+	klog.Infof("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
+
+	resp, err := p.clusterManager.ListNodePools(ctx, req, options...)
+	if err != nil {
+		return nil, err
+	}
+
+	pools := []*NodePool{}
+
+	for _, np := range resp.GetNodePools() {
+		pools = append(pools, &NodePool{
+			Project:    projectID,
+			ClusterID:  cluster,
+			Zone:       zone,
+			NodePoolID: np.GetName(),
+			NodeCount:  np.GetInitialNodeCount(),
+		})
+	}
+
+	return pools, nil
+}
+
 func (p *GKEProvider) SetNodePoolSizes(nodePools []*NodePool, size int32) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
@@ -272,7 +305,7 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []*NodePool, size int32) error 
 			NodeCount:  size,
 		})
 
-		klog.Infof("Created Resize to 0 Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s", nodePool.Project, nodePool.ClusterID, nodePool.Zone, nodePool.NodePoolID)
+		klog.V(3).Infof("Created Resize to 0 Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s", nodePool.Project, nodePool.ClusterID, nodePool.Zone, nodePool.NodePoolID)
 	}
 
 	ctx := context.TODO()
@@ -281,10 +314,10 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []*NodePool, size int32) error 
 
 		resp, err := p.clusterManager.SetNodePoolSize(ctx, req, options...)
 		if err != nil {
-			klog.Infof("Failed to executed request: %s", err.Error())
+			klog.V(1).Infof("Failed to executed request: %s", err.Error())
 		}
 
-		klog.Infof("Response Status: %s", resp.GetStatus())
+		klog.V(3).Infof("Response Status: %s", resp.GetStatus())
 	}
 
 	return nil
@@ -331,7 +364,7 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []*NodePool) error {
 			NodeCount:  nodePool.NodeCount,
 		})
 
-		klog.Infof("Created Resize to %d Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
+		klog.V(3).Infof("Created Resize to %d Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
 			nodePool.NodeCount,
 			nodePool.Project,
 			nodePool.ClusterID,
@@ -344,10 +377,10 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []*NodePool) error {
 	for _, req := range requests {
 		resp, err := p.clusterManager.SetNodePoolSize(ctx, req, options...)
 		if err != nil {
-			klog.Fatalf("Failed to executed request: %s", err.Error())
+			klog.V(1).Infof("Failed to execute request to reset node pool size: %s", err.Error())
 		}
 
-		klog.Infof("Response Status: %s", resp.GetStatus())
+		klog.V(3).Infof("Response Status: %s", resp.GetStatus())
 	}
 
 	return nil

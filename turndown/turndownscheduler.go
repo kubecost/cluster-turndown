@@ -72,9 +72,14 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 	now := time.Now()
 	downTime := schedule.ScaleDownTime
 	downMeta := schedule.ScaleDownMetadata
+	downRepeat := downMeta[TurndownJobRepeat]
+	if downRepeat == "" {
+		downRepeat = TurndownJobRepeatNone
+	}
 
 	upTime := schedule.ScaleUpTime
 	upMeta := schedule.ScaleUpMetadata
+	//upRepeat := upMeta[TurndownJobRepeat]
 
 	current := schedule.Current
 	if current == TurndownJobTypeScaleDown {
@@ -95,15 +100,21 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 		}
 	}
 
-	scaleDownID, err := ts.scheduler.ScheduleWithID(schedule.ScaleDownID, downTime, ts.scaleDown, downMeta)
-	if err != nil {
-		ts.store.Clear()
-		return err
+	var scaleDownID string
+	var err error
+	if current == TurndownJobTypeScaleUp && downRepeat != TurndownJobRepeatNone {
+		scaleDownID, err = ts.scheduler.ScheduleWithID(schedule.ScaleDownID, downTime, ts.scaleDown, downMeta)
+		if err != nil {
+			ts.store.Clear()
+			return err
+		}
 	}
 
 	_, err = ts.scheduler.ScheduleWithID(schedule.ScaleUpID, upTime, ts.scaleUp, upMeta)
 	if err != nil {
-		ts.scheduler.Cancel(scaleDownID)
+		if scaleDownID != "" {
+			ts.scheduler.Cancel(scaleDownID)
+		}
 		ts.store.Clear()
 		return err
 	}

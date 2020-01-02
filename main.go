@@ -4,11 +4,9 @@ import (
 	"flag"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/kubecost/kubecost-turndown/turndown"
 
@@ -25,31 +23,6 @@ func runWebServer(scheduler *turndown.TurndownScheduler, manager turndown.Turndo
 	mux.HandleFunc("/setServiceKey", endpoints.HandleSetServiceKey)
 
 	klog.Fatal(http.ListenAndServe(":9731", mux))
-}
-
-func initLocalKubernetes() kubernetes.Interface {
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir = os.Getenv("USERPROFILE")
-	}
-
-	// Kubernetes API setup
-	configFile := filepath.Join(homeDir, ".kube", "config")
-	klog.Infof("KubeConfig Path: %s", configFile)
-
-	kc, err := clientcmd.BuildConfigFromFlags("", configFile)
-	if err != nil {
-		klog.Fatalf("Fatal: %s", err.Error())
-		return nil
-	}
-
-	k8s, err := kubernetes.NewForConfig(kc)
-	if err != nil {
-		klog.Fatalf("Fatal: %s", err.Error())
-		return nil
-	}
-
-	return k8s
 }
 
 func initKubernetes() kubernetes.Interface {
