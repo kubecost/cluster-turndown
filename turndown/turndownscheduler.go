@@ -102,7 +102,10 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 
 	var scaleDownID string
 	var err error
-	if current == TurndownJobTypeScaleUp && downRepeat != TurndownJobRepeatNone {
+
+	if current == TurndownJobTypeScaleUp && downRepeat == TurndownJobRepeatNone {
+		klog.V(3).Infof("ScaleUp Job with NoRepeat ScaleDown. Omitting Scale Down Schedule.")
+	} else {
 		scaleDownID, err = ts.scheduler.ScheduleWithID(schedule.ScaleDownID, downTime, ts.scaleDown, downMeta)
 		if err != nil {
 			ts.store.Clear()
@@ -234,6 +237,11 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 
 	// Handle Errors
 	if err != nil {
+		// Schedule is written, this is simply waiting on the pod to move nodes, so we just ignore any rescheduling
+		if err.Error() == "EnvironmentPrepare" {
+			return
+		}
+
 		klog.V(1).Infof("Failed to run scaling job: %s - Error: %s", jobType, err.Error())
 	}
 
@@ -315,8 +323,8 @@ func (ts *TurndownScheduler) scaleDown() error {
 			return err
 		}
 
-		// Since we'll be moving nodes anyways, we'll early return here
-		return nil
+		// Since we'll be moving nodes and rescheduling, we'll return a "special" error here
+		return fmt.Errorf("EnvironmentPrepare")
 	} else {
 		klog.V(3).Infof("Already running on correct turndown node. No need to setup environment")
 	}
