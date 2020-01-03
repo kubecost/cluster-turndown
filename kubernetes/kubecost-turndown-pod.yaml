@@ -139,7 +139,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 0.2Gi
+      storage: 0.1Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -161,7 +161,7 @@ spec:
     spec:
       containers:
       - name: kubecost-turndown
-        image: gcr.io/kubecost1/kubecost-turndown:v2-SNAPSHOT
+        image: gcr.io/kubecost1/kubecost-turndown:v1-SNAPSHOT
         imagePullPolicy: Always
         volumeMounts:
         - mountPath: /var/configs
