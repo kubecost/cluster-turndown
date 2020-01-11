@@ -24,7 +24,7 @@ import (
 const (
 	LabelGKENodePool      = "cloud.google.com/gke-nodepool"
 	GKECredsEnvVar        = "GOOGLE_APPLICATION_CREDENTIALS"
-	GKEAuthServiceAccount = "/var/configs/key.json"
+	GKEAuthServiceAccount = "/var/keys/service-key.json"
 )
 
 var (

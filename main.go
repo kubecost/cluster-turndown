@@ -20,7 +20,7 @@ func runWebServer(scheduler *turndown.TurndownScheduler, manager turndown.Turndo
 
 	mux.HandleFunc("/schedule", endpoints.HandleStartSchedule)
 	mux.HandleFunc("/cancel", endpoints.HandleCancelSchedule)
-	mux.HandleFunc("/setServiceKey", endpoints.HandleSetServiceKey)
+	mux.HandleFunc("/serviceKey", endpoints.HandleSetServiceKey)
 
 	klog.Fatal(http.ListenAndServe(":9731", mux))
 }
@@ -50,7 +50,7 @@ func main() {
 
 	// Setup Components
 	kubeClient := initKubernetes()
-	scheduleStore := turndown.NewDiskScheduleStore("/var/configs/startup.json")
+	scheduleStore := turndown.NewDiskScheduleStore("/var/configs/schedule.json")
 	provider := turndown.NewGKEProvider(kubeClient)
 	manager := turndown.NewKubernetesTurndownManager(kubeClient, provider, node)
 	scheduler := turndown.NewTurndownScheduler(manager, scheduleStore)

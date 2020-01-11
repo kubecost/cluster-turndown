@@ -218,12 +218,17 @@ func (ts *TurndownScheduler) Cancel() error {
 	return nil
 }
 
-func (ts *TurndownScheduler) GetSchedule() Schedule {
+func (ts *TurndownScheduler) GetSchedule() *Schedule {
 	ts.lock.Lock()
 	defer ts.lock.Unlock()
 
+	if ts.schedule == nil {
+		return nil
+	}
+
 	// Return a copy of the schedule
-	return *ts.schedule
+	clone := *ts.schedule
+	return &clone
 }
 
 // Job Complete handler to reschedule a new job

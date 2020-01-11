@@ -164,15 +164,17 @@ spec:
         image: gcr.io/kubecost1/kubecost-turndown:v1-SNAPSHOT
         imagePullPolicy: Always
         volumeMounts:
-        - mountPath: /var/configs
-          name: turndown-volume
+        - name: turndown-volume
+          mountPath: /var/configs
+        - name: turndown-keys
+          mountPath: /var/keys
         env:
         - name: NODE_NAME
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
         - name: GOOGLE_APPLICATION_CREDENTIALS
-          value: /var/configs/key.json
+          value: /var/keys/service-key.json
         ports:
         - name: http-server
           containerPort: 9731
@@ -182,8 +184,24 @@ spec:
       volumes:
       - name: turndown-volume
         persistentVolumeClaim:
-            claimName: kubecost-turndown
+          claimName: kubecost-turndown
+      - name: turndown-keys
+        secret:
+          secretName: kubecost-turndown-service-key
       tolerations:
         - key: CriticalAddonsOnly
           operator: Exists
           effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubecost-turndown-service
+spec:
+  type: LoadBalancer
+  ports:
+  - name: kubecost-turndown
+    port: 9731
+    targetPort: 9731
+  selector:
+    app: kubecost-turndown

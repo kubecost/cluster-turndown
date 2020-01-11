@@ -27,6 +27,13 @@ type DataEnvelope struct {
 	Data   interface{} `json:"data"`
 }
 
+// ScheduleTurndownRequest is the POST encoding used to
+type ScheduleTurndownRequest struct {
+	Start  time.Time `json:"start"`
+	End    time.Time `json:"end"`
+	Repeat string    `json:"repeat,omitempty"`
+}
+
 type TurndownEndpoints struct {
 	scheduler *TurndownScheduler
 	turndown  TurndownManager
@@ -45,45 +52,53 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	q := r.URL.Query()
-	start := q.Get("start")
-	end := q.Get("end")
-	repeat := q.Get("repeat")
+	if r.Method == http.MethodGet {
+		schedule := te.scheduler.GetSchedule()
+		if schedule == nil {
+			w.Write(wrapData(nil, fmt.Errorf("No schedule available.")))
+			return
+		}
 
-	var err error = nil
-	if start == "" {
-		err = fmt.Errorf("No 'start' date parameter provided.")
-	} else if end == "" {
-		err = fmt.Errorf("No 'end' date parameter provided.")
-	} else if repeat == "" {
-		err = fmt.Errorf("No 'repeat' type provided. Must set to 'none', 'daily', or 'weekly'.")
-	}
-
-	if err != nil {
-		w.Write(wrapData(nil, err))
+		w.Write(wrapData(schedule, nil))
 		return
 	}
 
-	startTime, err := time.Parse(RFC3339Milli, start)
-	if err != nil {
-		w.Write(wrapData(nil, fmt.Errorf("Failed to parse 'start' time.")))
-		return
-	}
-	endTime, err := time.Parse(RFC3339Milli, end)
-	if err != nil {
-		w.Write(wrapData(nil, fmt.Errorf("Failed to parse 'end' time.")))
+	if r.Method == http.MethodPost {
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			w.Write(wrapData(nil, err))
+			return
+		}
+
+		var request ScheduleTurndownRequest
+		err = json.Unmarshal(data, &request)
+		if err != nil {
+			w.Write(wrapData(nil, err))
+			return
+		}
+
+		if request.Repeat == "" {
+			request.Repeat = TurndownJobRepeatNone
+		}
+
+		err = te.scheduler.ScheduleTurndown(request.Start, request.End, request.Repeat)
+		if err != nil {
+			w.Write(wrapData(nil, err))
+			return
+		}
+
+		schedule := te.scheduler.GetSchedule()
+
+		w.Write(wrapData(schedule, nil))
 		return
 	}
 
-	err = te.scheduler.ScheduleTurndown(startTime, endTime, repeat)
-	if err != nil {
-		w.Write(wrapData(nil, err))
-		return
-	}
-
-	schedule := te.scheduler.GetSchedule()
-
-	w.Write(wrapData(&schedule, nil))
+	resp, _ := json.Marshal(&DataEnvelope{
+		Code:   http.StatusNotFound,
+		Status: "error",
+		Data:   fmt.Sprintf("Not Found for method type: %s", r.Method),
+	})
+	w.Write(resp)
 }
 
 func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +141,16 @@ func (te *TurndownEndpoints) HandleSetServiceKey(w http.ResponseWriter, r *http.
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	if r.Method != http.MethodPost {
+		resp, _ := json.Marshal(&DataEnvelope{
+			Code:   http.StatusNotFound,
+			Status: "error",
+			Data:   fmt.Sprintf("Not Found for method type: %s", r.Method),
+		})
+		w.Write(resp)
+		return
+	}
+
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.Write(wrapData(nil, err))
@@ -150,7 +175,7 @@ func wrapData(data interface{}, err error) []byte {
 		resp, _ = json.Marshal(&DataEnvelope{
 			Code:   http.StatusInternalServerError,
 			Status: "error",
-			Data:   []byte(err.Error()),
+			Data:   err.Error(),
 		})
 	} else {
 		resp, _ = json.Marshal(&DataEnvelope{

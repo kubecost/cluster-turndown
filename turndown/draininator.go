@@ -396,7 +396,7 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 	case <-wc.Wait():
 		return nil
 	case <-time.After(globalTimeout):
-		return fmt.Errorf("Timed out while atwdtempting to delete pods.")
+		return fmt.Errorf("Timed out while attempting to delete pods.")
 	}
 }
 
