@@ -68,7 +68,7 @@ $ kubectl get pods -l app=kubecost-turndown -n kubecost
 
 ---
 ### Kubecost Turndown Endpoints
-To use the `kubecost-turndown` service, you must provide the `service-key.json` contents and then set your turndown schedule.
+To use the `kubecost-turndown` service, you will need to use a web request utility such as [Postman](https://www.getpostman.com/) or [cURL](https://curl.haxx.se/). 
 
 #### Locate the Service Public IP
 To locate the public IP to execute calls against, use the provided command:
@@ -129,7 +129,11 @@ The response will look something like this:
 ```
 
 #### Helper Utility for Scheduling
-Also supplied is a bash script that locates the service ip, and sends the schedule request via `curl`. Make sure that your dates are properly RFC3339 formatted.
+There is a `set-schedule.sh` bash script provided with this documentation that can assist in setting a turndown schedule. It provides automation for the previous steps:
+* Locates the service public IP
+* Sends a request to the scheduling endpoint via `cURL`.
+
+Make sure that your dates are properly RFC3339 formatted.
 
 ```bash
 $ ./set-schedule.sh <START> <END> <REPEAT>
