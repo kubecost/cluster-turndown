@@ -1,17 +1,16 @@
 package turndown
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
+
+	"github.com/kubecost/kubecost-turndown/turndown/patcher"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/client-go/kubernetes"
 
 	"k8s.io/klog"
@@ -20,13 +19,15 @@ import (
 // Flattener is the type used to set specific kubernetes annotations and configurations\
 // to entice the autoscaler to downscale the cluster.
 type Flattener struct {
-	client kubernetes.Interface
+	client          kubernetes.Interface
+	omitDeployments []string
 }
 
 // Creates a new Draininator instance for a specific node.
-func NewFlattener(client kubernetes.Interface) *Flattener {
+func NewFlattener(client kubernetes.Interface, omitDeployments []string) *Flattener {
 	return &Flattener{
-		client: client,
+		client:          client,
+		omitDeployments: omitDeployments,
 	}
 }
 
@@ -53,6 +54,35 @@ func (d *Flattener) Flatten() error {
 	return nil
 }
 
+func (d *Flattener) Expand() error {
+	err := d.ExpandDeployments()
+	if err != nil {
+		return err
+	}
+
+	err = d.ExpandDaemonSets()
+	if err != nil {
+		return err
+	}
+
+	err = d.ResumeJobs()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *Flattener) isOmitted(deployment *appsv1.Deployment) bool {
+	for _, d := range d.omitDeployments {
+		if d == deployment.Name {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (d *Flattener) FlattenDeployments() error {
 	deployments, err := d.client.AppsV1().Deployments("").List(metav1.ListOptions{})
 	if err != nil {
@@ -60,6 +90,10 @@ func (d *Flattener) FlattenDeployments() error {
 	}
 
 	for _, deployment := range deployments.Items {
+		if d.isOmitted(&deployment) {
+			continue
+		}
+
 		err := d.FlattenDeployment(deployment)
 		if err != nil {
 			klog.V(3).Infof("Failed to flatten deployment: %s", deployment.Name)
@@ -102,204 +136,141 @@ func (d *Flattener) SuspendJobs() error {
 }
 
 // Flatten
-func (d *Flattener) FlattenDeployment(deployment appsv1.Deployment) error {
-	oldData, err := json.Marshal(deployment)
+func (d *Flattener) FlattenDeployment(dep appsv1.Deployment) error {
+	_, err := patcher.PatchDeployment(d.client, dep, func(deployment *appsv1.Deployment) error {
+		updateEvictFlag := false
+		updateReplicas := false
+		updateRollout := false
 
-	updateEvictFlag := false
-	if deployment.Namespace == "kube-system" {
-		updateEvictFlag = d.setSafeEvict(&deployment)
-	}
+		if deployment.Namespace == "kube-system" {
+			updateEvictFlag = d.setSafeEvict(deployment)
+		} else {
+			updateReplicas = d.zeroOutReplicas(deployment)
+			updateRollout = d.zeroOutRollingUpdate(deployment)
+		}
 
-	updateReplicas := d.zeroOutReplicas(&deployment)
-	updateRollout := d.zeroOutRollingUpdate(&deployment)
+		// No updates -- Early Return
+		if !updateEvictFlag && !updateReplicas && !updateRollout {
+			return patcher.NoUpdates
+		}
 
-	// No updates -- Early Return
-	if !updateEvictFlag && !updateReplicas && !updateRollout {
 		return nil
-	}
+	})
 
-	// Patch deployment with new values
-	newData, err := json.Marshal(deployment)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, deployment)
-	if err != nil {
-		klog.Errorf("Couldn't update replica count on deployment: %s", err.Error())
-		return err
-	}
-
-	_, err = d.client.AppsV1().Deployments(deployment.Namespace).Patch(deployment.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch deployment: %s", err.Error())
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *Flattener) ExpandDeployment(deployment appsv1.Deployment) error {
-	oldData, err := json.Marshal(deployment)
+func (d *Flattener) ExpandDeployment(dep appsv1.Deployment) error {
+	_, err := patcher.PatchDeployment(d.client, dep, func(deployment *appsv1.Deployment) error {
+		updateEvictFlag := false
+		updateReplicas := false
+		updateRollout := false
 
-	updateEvictFlag := false
-	if deployment.Namespace == "kube-system" {
-		updateEvictFlag = d.resetSafeEvict(&deployment)
-	}
+		if deployment.Namespace == "kube-system" {
+			updateEvictFlag = d.resetSafeEvict(deployment)
+		} else {
+			updateReplicas = d.resetReplicas(deployment)
+			updateRollout = d.resetRollingUpdate(deployment)
+		}
 
-	updateReplicas := d.resetReplicas(&deployment)
-	updateRollout := d.resetRollingUpdate(&deployment)
+		// No updates
+		if !updateEvictFlag && !updateReplicas && !updateRollout {
+			return patcher.NoUpdates
+		}
 
-	// No updates -- Early Return
-	if !updateEvictFlag && !updateReplicas && !updateRollout {
 		return nil
-	}
+	})
 
-	// Patch deployment with new values
-	newData, err := json.Marshal(deployment)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, deployment)
-	if err != nil {
-		klog.Errorf("Couldn't update replica count on deployment: %s", err.Error())
-		return err
-	}
-
-	_, err = d.client.AppsV1().Deployments(deployment.Namespace).Patch(deployment.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch deployment: %s", err.Error())
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *Flattener) FlattenDaemonSet(daemonset appsv1.DaemonSet) error {
-	if daemonset.Spec.Template.Annotations != nil {
-		safe, ok := daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict]
+func (d *Flattener) FlattenDaemonSet(ds appsv1.DaemonSet) error {
+	if ds.Spec.Template.Annotations != nil {
+		safe, ok := ds.Spec.Template.Annotations[ClusterAutoScalerSafeEvict]
 		if ok && safe == "true" {
 			return nil
 		}
 	}
 
-	oldData, err := json.Marshal(daemonset)
-
-	if daemonset.Spec.Template.Annotations == nil {
-		daemonset.Spec.Template.Annotations = map[string]string{
-			ClusterAutoScalerSafeEvict: "true",
+	_, err := patcher.PatchDaemonSet(d.client, ds, func(daemonset *appsv1.DaemonSet) error {
+		if daemonset.Spec.Template.Annotations == nil {
+			daemonset.Spec.Template.Annotations = map[string]string{
+				ClusterAutoScalerSafeEvict: "true",
+			}
+		} else {
+			daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict] = "true"
 		}
-	} else {
-		daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict] = "true"
-	}
 
-	newData, err := json.Marshal(daemonset)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, daemonset)
-	if err != nil {
-		klog.Errorf("Couldn't add safe-evict annotation to deployment pods for kube-system: %s", err.Error())
-		return err
-	}
+		return nil
+	})
 
-	_, err = d.client.AppsV1().DaemonSets(daemonset.Namespace).Patch(daemonset.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch deployment: %s", err.Error())
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *Flattener) ExpandDaemonSet(daemonset appsv1.DaemonSet) error {
-	if daemonset.Spec.Template.Annotations == nil {
+func (d *Flattener) ExpandDaemonSet(ds appsv1.DaemonSet) error {
+	if ds.Spec.Template.Annotations == nil {
 		return nil
 	}
 
-	oldData, err := json.Marshal(daemonset)
+	_, err := patcher.PatchDaemonSet(d.client, ds, func(daemonset *appsv1.DaemonSet) error {
+		delete(daemonset.Spec.Template.Annotations, ClusterAutoScalerSafeEvict)
+		return nil
+	})
 
-	delete(daemonset.Spec.Template.Annotations, ClusterAutoScalerSafeEvict)
-
-	newData, err := json.Marshal(daemonset)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, daemonset)
-	if err != nil {
-		klog.Errorf("Couldn't remove safe-evict annotation from daemonset: %s", err.Error())
-		return err
-	}
-
-	_, err = d.client.AppsV1().DaemonSets(daemonset.Namespace).Patch(daemonset.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch DaemonSet: %s", err.Error())
-		return err
-	}
-
-	return nil
+	return err
 }
 
-func (d *Flattener) SuspendJob(job v1b1.CronJob) error {
-	oldData, err := json.Marshal(job)
-
-	var previousValue *bool
-	if job.Spec.Suspend != nil {
-		previousValue = job.Spec.Suspend
-	}
-
-	// Suspend the job
-	value := true
-	job.Spec.Suspend = &value
-
-	// If there wasn't a previous value set, no need to set flag
-	if previousValue != nil {
-		if job.Annotations == nil {
-			job.Annotations = map[string]string{
-				KubecostTurnDownJobSuspend: fmt.Sprintf("%t", *previousValue),
-			}
-		} else {
-			job.Annotations[KubecostTurnDownJobSuspend] = fmt.Sprintf("%t", *previousValue)
+func (d *Flattener) SuspendJob(cronJob v1b1.CronJob) error {
+	_, err := patcher.PatchCronJob(d.client, cronJob, func(job *v1b1.CronJob) error {
+		var previousValue *bool
+		if job.Spec.Suspend != nil {
+			previousValue = job.Spec.Suspend
 		}
-	}
 
-	newData, err := json.Marshal(job)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
-	if err != nil {
-		klog.Errorf("Couldn't set CronJob to suspended: %s", err.Error())
-		return err
-	}
+		// Suspend the job
+		value := true
+		job.Spec.Suspend = &value
 
-	_, err = d.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
-		return err
-	}
+		// If there wasn't a previous value set, no need to set flag
+		if previousValue != nil {
+			if job.Annotations == nil {
+				job.Annotations = map[string]string{
+					KubecostTurnDownJobSuspend: fmt.Sprintf("%t", *previousValue),
+				}
+			} else {
+				job.Annotations[KubecostTurnDownJobSuspend] = fmt.Sprintf("%t", *previousValue)
+			}
+		}
 
-	return nil
+		return nil
+	})
+
+	return err
 }
 
 // Sets the deployment pods to a safe-evict state, updates annotation flags
-func (d *Flattener) ResumeJob(job v1b1.CronJob) error {
-	oldData, err := json.Marshal(job)
+func (d *Flattener) ResumeJob(cronJob v1b1.CronJob) error {
+	_, err := patcher.PatchCronJob(d.client, cronJob, func(job *v1b1.CronJob) error {
+		var suspend bool = false
+		var err error
+		if job.Annotations != nil {
+			// If there wasn't an entry, remove the pod safe evict flag
+			suspendEntry, ok := job.Annotations[KubecostTurnDownJobSuspend]
+			if ok {
+				suspend, err = strconv.ParseBool(suspendEntry)
+				if err != nil {
+					return err
+				}
 
-	var suspend bool = false
-	if job.Annotations != nil {
-		// If there wasn't an entry, remove the pod safe evict flag
-		suspendEntry, ok := job.Annotations[KubecostTurnDownJobSuspend]
-		if ok {
-			suspend, err = strconv.ParseBool(suspendEntry)
-			if err != nil {
-				return err
+				delete(job.Annotations, KubecostTurnDownJobSuspend)
 			}
-
-			delete(job.Annotations, KubecostTurnDownJobSuspend)
 		}
-	}
 
-	job.Spec.Suspend = &suspend
+		job.Spec.Suspend = &suspend
+		return nil
+	})
 
-	newData, err := json.Marshal(job)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
-	if err != nil {
-		klog.Errorf("Couldn't set CronJob to resume: %s", err.Error())
-		return err
-	}
-
-	_, err = d.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (d *Flattener) ExpandDeployments() error {
@@ -309,6 +280,10 @@ func (d *Flattener) ExpandDeployments() error {
 	}
 
 	for _, deployment := range deployments.Items {
+		if d.isOmitted(&deployment) {
+			continue
+		}
+
 		err := d.ExpandDeployment(deployment)
 		if err != nil {
 			klog.V(3).Infof("Failed to expand deployment: %s", deployment.Name)

@@ -243,7 +243,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 	// Handle Errors
 	if err != nil {
 		// Schedule is written, this is simply waiting on the pod to move nodes, so we just ignore any rescheduling
-		if err.Error() == "EnvironmentPrepare" {
+		if err.Error() == "EnvironmentPrepare" || err.Error() == "Cancelled" {
 			return
 		}
 
@@ -323,9 +323,9 @@ func (ts *TurndownScheduler) scaleDown() error {
 	if !isOnNode {
 		err := ts.manager.PrepareTurndownEnvironment()
 		if err != nil {
-			klog.V(1).Infof("Failed to prepare current turndown environment. Cancelling.")
+			klog.V(1).Infof("Failed to prepare current turndown environment. Cancelling. Err=%s", err.Error())
 			ts.Cancel()
-			return err
+			return fmt.Errorf("Cancelled")
 		}
 
 		// Since we'll be moving nodes and rescheduling, we'll return a "special" error here

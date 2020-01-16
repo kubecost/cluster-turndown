@@ -161,7 +161,7 @@ spec:
     spec:
       containers:
       - name: kubecost-turndown
-        image: gcr.io/kubecost1/kubecost-turndown:v1-SNAPSHOT
+        image: gcr.io/kubecost1/kubecost-turndown:v1
         imagePullPolicy: Always
         volumeMounts:
         - name: turndown-volume
@@ -198,9 +198,10 @@ kind: Service
 metadata:
   name: kubecost-turndown-service
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
   - name: kubecost-turndown
+    protocol: TCP
     port: 9731
     targetPort: 9731
   selector:

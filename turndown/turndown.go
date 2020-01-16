@@ -1,15 +1,15 @@
 package turndown
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
+	"os"
 
-	v1b1 "k8s.io/api/batch/v1beta1"
+	"github.com/kubecost/kubecost-turndown/turndown/patcher"
+
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
+
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
@@ -17,6 +17,10 @@ import (
 const (
 	KubecostTurnDownJobSuspend = "kubecost.kubernetes.io/job-suspend"
 	KubecostTurnDownTaintKey   = "CriticalAddonsOnly"
+)
+
+var (
+	KubecostFlattenerOmit = []string{"kubecost-turndown", "kube-dns", "kube-dns-autoscaler"}
 )
 
 // TurndownManager is an implementation prototype for an object capable of managing
@@ -46,6 +50,7 @@ type KubernetesTurndownManager struct {
 	client      kubernetes.Interface
 	provider    ComputeProvider
 	currentNode string
+	autoScaling *bool
 	nodePools   []*NodePool
 }
 
@@ -54,11 +59,12 @@ func NewKubernetesTurndownManager(client kubernetes.Interface, provider ComputeP
 		client:      client,
 		provider:    provider,
 		currentNode: currentNode,
+		autoScaling: nil,
 	}
 }
 
 func (ktdm *KubernetesTurndownManager) IsScaledDown() bool {
-	return ktdm.nodePools == nil || len(ktdm.nodePools) != 0
+	return ktdm.nodePools == nil || len(ktdm.nodePools) == 0
 }
 
 func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
@@ -82,187 +88,121 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return fmt.Errorf("The current provider does not have a service account key set.")
 	}
 
-	// There is already a valid turndown node pool
-	if ktdm.provider.IsTurndownNodePool() {
-		return nil
-	}
-
-	// Create a new singleton node pool with a small instance capable of hosting the turndown
-	// pod -- this implementation will create and wait for the node to exist before returning
-	err := ktdm.provider.CreateSingletonNodePool()
+	// Determine if there is autoscaling node pools
+	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
 	}
 
-	// Lookup the turndown node in the kubernetes API
-	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector: "kubecost-turndown-node=true",
-	})
-	if err != nil {
-		return err
-	}
-
-	// Patch the Node with the kubecost turndown taint
-	// Instead of using a custom taint here, we use 'CriticalAddonsOnly', which
-	// will allow kube-dns to continue to schedule on the node (required)
-	node := nodeList.Items[0]
-	taints := node.Spec.Taints
-	for _, taint := range taints {
-		if taint.Key == KubecostTurnDownTaintKey {
-			return nil
+	var autoScalingNodePool *NodePool = nil
+	for _, np := range nodePools {
+		if np.AutoScaling {
+			autoScalingNodePool = np
+			break
 		}
 	}
 
-	oldData, err := json.Marshal(node)
-	node.Spec.Taints = append(taints, v1.Taint{
-		Key:    KubecostTurnDownTaintKey,
-		Value:  "true",
-		Effect: v1.TaintEffectNoSchedule,
-	})
-	newData, err := json.Marshal(node)
+	// The Target Node for deployment selection
+	var tnode *v1.Node
 
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, node)
-	if err != nil {
-		return err
+	// When AutoScaling is Not Enabled, Create a Turndown Node
+	if autoScalingNodePool == nil {
+		klog.V(1).Infof("Finite node backed cluster. Creating singleton nodepool for turndown.")
+
+		// There is already a valid turndown node pool
+		if ktdm.provider.IsTurndownNodePool() {
+			return nil
+		}
+
+		// Create a new singleton node pool with a small instance capable of hosting the turndown
+		// pod -- this implementation will create and wait for the node to exist before returning
+		err := ktdm.provider.CreateSingletonNodePool()
+		if err != nil {
+			return err
+		}
+
+		// Lookup the turndown node in the kubernetes API
+		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
+			LabelSelector: "kubecost-turndown-node=true",
+		})
+		if err != nil {
+			return err
+		}
+		tnode = &nodeList.Items[0]
+	} else {
+		// Otherwise, have the current pod move to autoscaling node pool
+		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		var targetNode *v1.Node
+		for _, node := range nodeList.Items {
+			poolID := ktdm.provider.GetPoolID(&node)
+			if poolID == autoScalingNodePool.NodePoolID {
+				targetNode = &node
+				break
+			}
+		}
+
+		if targetNode == nil {
+			return fmt.Errorf("Target node was not located for autoscaling cluster.")
+		}
+
+		// Patch and get the updated node
+		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "kubecost-turndown-node", "true")
+		if err != nil {
+			return err
+		}
 	}
-	_, err = ktdm.client.CoreV1().Nodes().Patch(node.Name, types.MergePatchType, patch)
+
+	// Patch Node with Taint
+	_, err = patcher.PatchNode(ktdm.client, *tnode, func(n *v1.Node) error {
+		taints := n.Spec.Taints
+		for _, taint := range taints {
+			if taint.Key == KubecostTurnDownTaintKey {
+				return patcher.NoUpdates
+			}
+		}
+
+		n.Spec.Taints = append(taints, v1.Taint{
+			Key:    KubecostTurnDownTaintKey,
+			Value:  "true",
+			Effect: v1.TaintEffectNoSchedule,
+		})
+
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
 	klog.V(3).Infoln("Node Taint was successfully added for kubecost-turndown.")
 
+	// Locate turndown namespace -- default to kubecost
+	ns := os.Getenv("TURNDOWN_NAMESPACE")
+	if ns == "" {
+		ns = "kubecost"
+	}
+
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	// TODO: This should use the actual deployment namespace instead of "kubecost"
-	deployment, err := ktdm.client.AppsV1().Deployments("kubecost").Get("kubecost-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	oldData, err = json.Marshal(deployment)
-	deployment.Spec.Template.Spec.NodeSelector = map[string]string{
-		"kubecost-turndown-node": "true",
-	}
-	newData, err = json.Marshal(deployment)
-
-	patch, err = strategicpatch.CreateTwoWayMergePatch(oldData, newData, deployment)
-	if err != nil {
-		return err
-	}
-	// TODO: Use actual deployment namespace instead of "kubecost"
-	_, err = ktdm.client.AppsV1().Deployments("kubecost").Patch(deployment.Name, types.MergePatchType, patch)
+	_, err = patcher.PatchDeployment(ktdm.client, *deployment, func(d *appsv1.Deployment) error {
+		d.Spec.Template.Spec.NodeSelector = map[string]string{
+			"kubecost-turndown-node": "true",
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
 
 	klog.V(3).Infoln("Kubecost-Turndown Deployment successfully updated with node selector")
-
-	return nil
-}
-
-func (ktdm *KubernetesTurndownManager) SuspendJobs() error {
-	jobsList, err := ktdm.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, job := range jobsList.Items {
-		err := ktdm.SuspendJob(job)
-		if err != nil {
-			klog.V(3).Infof("Failed to suspend CronJob: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
-func (ktdm *KubernetesTurndownManager) ResumeJobs() error {
-	jobsList, err := ktdm.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, job := range jobsList.Items {
-		err := ktdm.ResumeJob(job)
-		if err != nil {
-			klog.V(3).Infof("Failed to resume CronJob: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
-func (ktdm *KubernetesTurndownManager) SuspendJob(job v1b1.CronJob) error {
-	oldData, err := json.Marshal(job)
-
-	var previousValue *bool
-	if job.Spec.Suspend != nil {
-		previousValue = job.Spec.Suspend
-	}
-
-	// Suspend the job
-	value := true
-	job.Spec.Suspend = &value
-
-	// If there wasn't a previous value set, no need to set flag
-	if previousValue != nil {
-		if job.Annotations == nil {
-			job.Annotations = map[string]string{
-				KubecostTurnDownJobSuspend: fmt.Sprintf("%t", *previousValue),
-			}
-		} else {
-			job.Annotations[KubecostTurnDownJobSuspend] = fmt.Sprintf("%t", *previousValue)
-		}
-	}
-
-	newData, err := json.Marshal(job)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
-	if err != nil {
-		klog.Errorf("Couldn't set CronJob to suspended: %s", err.Error())
-		return err
-	}
-
-	_, err = ktdm.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
-		return err
-	}
-
-	return nil
-}
-
-// Sets the deployment pods to a safe-evict state, updates annotation flags
-func (ktdm *KubernetesTurndownManager) ResumeJob(job v1b1.CronJob) error {
-	oldData, err := json.Marshal(job)
-
-	var suspend bool = false
-	if job.Annotations != nil {
-		// If there wasn't an entry, remove the pod safe evict flag
-		suspendEntry, ok := job.Annotations[KubecostTurnDownJobSuspend]
-		if ok {
-			suspend, err = strconv.ParseBool(suspendEntry)
-			if err != nil {
-				return err
-			}
-
-			delete(job.Annotations, KubecostTurnDownJobSuspend)
-		}
-	}
-
-	job.Spec.Suspend = &suspend
-
-	newData, err := json.Marshal(job)
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, job)
-	if err != nil {
-		klog.Errorf("Couldn't set CronJob to resume: %s", err.Error())
-		return err
-	}
-
-	_, err = ktdm.client.BatchV1beta1().CronJobs(job.Namespace).Patch(job.Name, types.MergePatchType, patch)
-	if err != nil {
-		klog.Errorf("Couldn't patch CronJob: %s", err.Error())
-		return err
-	}
 
 	return nil
 }
@@ -274,27 +214,56 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 		return err
 	}
 
-	// 2a. Suspend All Cron Jobs
-	err = ktdm.SuspendJobs()
+	// 2. Use provider to get all node pools used for this cluster, determine
+	// whether or not there exists autoscaling node pools
+	var isAutoScalingCluster bool = false
+	pools := make(map[string]*NodePool)
+	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
+	}
+	for _, np := range nodePools {
+		if np.AutoScaling {
+			isAutoScalingCluster = true
+		}
+		pools[np.NodePoolID] = np
 	}
 
-	// 2b. Use provided to generate expected node pools associated with this cluster
-	poolCollections, err := ktdm.provider.GetZoneNodePools(nodes)
-	if err != nil {
-		return err
-	}
-	nodePools, err := ktdm.provider.GetNodePools(poolCollections)
-	if err != nil {
-		return err
+	// If this cluster has autoscaling nodes, we consider the entire cluster
+	// autoscaling. Run Flatten on the cluster to reduce deployments and daemonsets
+	// to 0 replicas. Otherwise, just suspend cron jobs
+	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	if isAutoScalingCluster {
+		err := flattener.Flatten()
+		if err != nil {
+			klog.V(1).Infof("Failed to flatten cluster: %s", err.Error())
+			return err
+		}
+	} else {
+		err := flattener.SuspendJobs()
+		if err != nil {
+			klog.V(1).Infof("Failed to suspend jobs: %s", err.Error())
+			return err
+		}
 	}
 
-	// 3. Drain all of the nodes except the one this pod runs on
+	// 3. Drain a node if it is not the current node and is not part of an autoscaling pool.
 	var currentNodePoolID string
 	for _, n := range nodes.Items {
+		poolID := ktdm.provider.GetPoolID(&n)
+
 		if n.Name == ktdm.currentNode {
-			currentNodePoolID = ktdm.provider.GetPoolID(&n)
+			currentNodePoolID = poolID
+			continue
+		}
+
+		pool, ok := pools[poolID]
+		if !ok {
+			klog.V(1).Infof("Failed to locate pool id: %s in pools map.", poolID)
+			continue
+		}
+
+		if pool.AutoScaling {
 			continue
 		}
 
@@ -307,10 +276,10 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 		}
 	}
 
-	// 4. Filter out the current node pool holding the current node
+	// 4. Filter out the current node pool holding the current node and/or autoscaling
 	targetPools := []*NodePool{}
 	for _, np := range nodePools {
-		if np.NodePoolID == currentNodePoolID {
+		if np.NodePoolID == currentNodePoolID || np.AutoScaling {
 			continue
 		}
 
@@ -319,8 +288,9 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 
 	// Set NodePools on instance for resetting/upscaling
 	ktdm.nodePools = targetPools
+	ktdm.autoScaling = &isAutoScalingCluster
 
-	// 5. Resize all node pools to 0
+	// 5. Resize all the non-autoscaling node pools to 0
 	err = ktdm.provider.SetNodePoolSizes(targetPools, 0)
 	if err != nil {
 		// TODO: Any steps that fail AFTER draining should revert the drain step?
@@ -331,12 +301,24 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 }
 
 func (ktdm *KubernetesTurndownManager) loadNodePools() error {
-	pools, err := ktdm.provider.GetNodePoolList()
+	pools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
 	}
 
-	ktdm.nodePools = pools
+	var nodePools []*NodePool
+	for _, pool := range pools {
+		autoscaling := pool.AutoScaling
+
+		if autoscaling {
+			ktdm.autoScaling = &autoscaling
+			continue
+		}
+
+		nodePools = append(nodePools, pool)
+	}
+
+	ktdm.nodePools = nodePools
 	return nil
 }
 
@@ -360,15 +342,24 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 		return err
 	}
 
+	// 3. Expand Autoscaling Nodes or Resume Jobs
+	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	if ktdm.autoScaling != nil && *ktdm.autoScaling {
+		err := flattener.Expand()
+		if err != nil {
+			return err
+		}
+	} else {
+		err := flattener.ResumeJobs()
+		if err != nil {
+			return err
+		}
+	}
+
 	// No need to uncordone nodes here because they were complete removed and now added back
 	// Reset node pools on instance
 	ktdm.nodePools = nil
-
-	// Resume any suspended jobs
-	err = ktdm.ResumeJobs()
-	if err != nil {
-		return err
-	}
+	ktdm.autoScaling = nil
 
 	return nil
 }

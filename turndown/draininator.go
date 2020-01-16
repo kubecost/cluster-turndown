@@ -1,7 +1,6 @@
 package turndown
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kubecost/kubecost-turndown/async"
+	"github.com/kubecost/kubecost-turndown/turndown/patcher"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -16,8 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 
@@ -87,21 +85,12 @@ func (d *Draininator) CordonNode() error {
 		return nil
 	}
 
-	oldData, err := json.Marshal(*node)
-	node.Spec.Unschedulable = true
-	newData, err := json.Marshal(*node)
+	_, err = patcher.PatchNode(d.client, *node, func(n *v1.Node) error {
+		n.Spec.Unschedulable = true
+		return nil
+	})
 
-	patch, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, *node)
-	if err != nil {
-		return err
-	}
-	node, err = d.client.CoreV1().Nodes().Patch(d.node, types.MergePatchType, patch)
-	if err != nil {
-		return err
-	}
-
-	klog.V(3).Infof("Node: %s Cordoned Successfully", node.Name)
-	return nil
+	return err
 }
 
 // Deletes or evicts the pods on the node that qualify for eviction
