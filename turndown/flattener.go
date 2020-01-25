@@ -16,6 +16,8 @@ import (
 	"k8s.io/klog"
 )
 
+const KubecostTurnDownJobSuspend = "kubecost.kubernetes.io/job-suspend"
+
 // Flattener is the type used to set specific kubernetes annotations and configurations\
 // to entice the autoscaler to downscale the cluster.
 type Flattener struct {

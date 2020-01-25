@@ -161,7 +161,7 @@ spec:
     spec:
       containers:
       - name: kubecost-turndown
-        image: gcr.io/kubecost1/kubecost-turndown:v1
+        image: gcr.io/kubecost1/kubecost-turndown:v3-SNAPSHOT
         imagePullPolicy: Always
         volumeMounts:
         - name: turndown-volume
@@ -188,10 +188,6 @@ spec:
       - name: turndown-keys
         secret:
           secretName: kubecost-turndown-service-key
-      tolerations:
-        - key: CriticalAddonsOnly
-          operator: Exists
-          effect: NoSchedule
 ---
 apiVersion: v1
 kind: Service

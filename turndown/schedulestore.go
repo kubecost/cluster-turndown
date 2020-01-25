@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
+
+	"github.com/kubecost/kubecost-turndown/file"
 )
 
 type Schedule struct {
@@ -38,7 +40,7 @@ func NewDiskScheduleStore(file string) ScheduleStore {
 }
 
 func (dss *DiskScheduleStore) GetSchedule() (*Schedule, error) {
-	if !fileExists(dss.file) {
+	if !file.FileExists(dss.file) {
 		return nil, fmt.Errorf("No schedule exists")
 	}
 
@@ -70,7 +72,7 @@ func (dss *DiskScheduleStore) SetSchedule(schedule *Schedule) error {
 }
 
 func (dss *DiskScheduleStore) Clear() {
-	if !fileExists(dss.file) {
+	if !file.FileExists(dss.file) {
 		return
 	}
 

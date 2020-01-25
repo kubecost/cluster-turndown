@@ -7,18 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/kubecost/kubecost-turndown/turndown/provider"
 	"k8s.io/klog"
 )
-
-type userAgentTransport struct {
-	userAgent string
-	base      http.RoundTripper
-}
-
-func (t userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("User-Agent", t.userAgent)
-	return t.base.RoundTrip(req)
-}
 
 // DataEnvelope is a generic wrapper struct for http response data
 type DataEnvelope struct {
@@ -37,10 +28,10 @@ type ScheduleTurndownRequest struct {
 type TurndownEndpoints struct {
 	scheduler *TurndownScheduler
 	turndown  TurndownManager
-	provider  ComputeProvider
+	provider  provider.ComputeProvider
 }
 
-func NewTurndownEndpoints(scheduler *TurndownScheduler, turndown TurndownManager, provider ComputeProvider) *TurndownEndpoints {
+func NewTurndownEndpoints(scheduler *TurndownScheduler, turndown TurndownManager, provider provider.ComputeProvider) *TurndownEndpoints {
 	return &TurndownEndpoints{
 		scheduler: scheduler,
 		turndown:  turndown,

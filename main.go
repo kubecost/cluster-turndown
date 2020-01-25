@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -9,11 +10,13 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/kubecost/kubecost-turndown/turndown"
+	"github.com/kubecost/kubecost-turndown/turndown/provider"
+	"github.com/kubecost/kubecost-turndown/turndown/strategy"
 
 	"k8s.io/klog"
 )
 
-func runWebServer(scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager, provider turndown.ComputeProvider) {
+func runWebServer(scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager, provider provider.ComputeProvider) {
 	mux := http.NewServeMux()
 
 	endpoints := turndown.NewTurndownEndpoints(scheduler, manager, provider)
@@ -40,6 +43,19 @@ func initKubernetes() kubernetes.Interface {
 	return kubeClient
 }
 
+// For now, we'll choose our strategy based on the provider, but functionally, there is
+// no dependency. T
+func strategyForProvider(c kubernetes.Interface, p provider.ComputeProvider) (strategy.TurndownStrategy, error) {
+	switch v := p.(type) {
+	case *provider.GKEProvider:
+		return strategy.NewMasterlessTurndownStrategy(c, p), nil
+	case *provider.AWSProvider:
+		return strategy.NewStandardTurndownStrategy(c, p), nil
+	default:
+		return nil, fmt.Errorf("No strategy available for: %+v", v)
+	}
+}
+
 func main() {
 	klog.InitFlags(nil)
 	flag.Set("v", "5")
@@ -51,8 +67,17 @@ func main() {
 	// Setup Components
 	kubeClient := initKubernetes()
 	scheduleStore := turndown.NewDiskScheduleStore("/var/configs/schedule.json")
-	provider := turndown.NewGKEProvider(kubeClient)
-	manager := turndown.NewKubernetesTurndownManager(kubeClient, provider, node)
+	provider, err := provider.NewProvider(kubeClient)
+	if err != nil {
+		klog.V(1).Infof("Failed to determine provider: %s", err.Error())
+		return
+	}
+	strategy, err := strategyForProvider(kubeClient, provider)
+	if err != nil {
+		klog.V(1).Infof("Failed to create strategy: %s", err.Error())
+		return
+	}
+	manager := turndown.NewKubernetesTurndownManager(kubeClient, provider, strategy, node)
 	scheduler := turndown.NewTurndownScheduler(manager, scheduleStore)
 
 	runWebServer(scheduler, manager, provider)

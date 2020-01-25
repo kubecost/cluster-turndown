@@ -11,6 +11,7 @@ RUN go mod download
 COPY main.go /app/main.go
 COPY turndown/ /app/turndown
 COPY async/ /app/async
+COPY file/ /app/file
 
 RUN go build -o main .
 

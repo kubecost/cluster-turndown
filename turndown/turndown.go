@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/kubecost/kubecost-turndown/turndown/patcher"
+	"github.com/kubecost/kubecost-turndown/turndown/provider"
+	"github.com/kubecost/kubecost-turndown/turndown/strategy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -12,11 +14,6 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
-)
-
-const (
-	KubecostTurnDownJobSuspend = "kubecost.kubernetes.io/job-suspend"
-	KubecostTurnDownTaintKey   = "CriticalAddonsOnly"
 )
 
 var (
@@ -48,16 +45,18 @@ type TurndownManager interface {
 
 type KubernetesTurndownManager struct {
 	client      kubernetes.Interface
-	provider    ComputeProvider
+	provider    provider.ComputeProvider
+	strategy    strategy.TurndownStrategy
 	currentNode string
 	autoScaling *bool
-	nodePools   []*NodePool
+	nodePools   []provider.NodePool
 }
 
-func NewKubernetesTurndownManager(client kubernetes.Interface, provider ComputeProvider, currentNode string) TurndownManager {
+func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.ComputeProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
 	return &KubernetesTurndownManager{
 		client:      client,
 		provider:    provider,
+		strategy:    strategy,
 		currentNode: currentNode,
 		autoScaling: nil,
 	}
@@ -84,101 +83,21 @@ func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
 }
 
 func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
-	if !ktdm.provider.IsServiceAccountKey() {
-		return fmt.Errorf("The current provider does not have a service account key set.")
-	}
-
-	// Determine if there is autoscaling node pools
-	nodePools, err := ktdm.provider.GetNodePools()
-	if err != nil {
-		return err
-	}
-
-	var autoScalingNodePool *NodePool = nil
-	for _, np := range nodePools {
-		if np.AutoScaling {
-			autoScalingNodePool = np
-			break
-		}
-	}
-
-	// The Target Node for deployment selection
-	var tnode *v1.Node
-
-	// When AutoScaling is Not Enabled, Create a Turndown Node
-	if autoScalingNodePool == nil {
-		klog.V(1).Infof("Finite node backed cluster. Creating singleton nodepool for turndown.")
-
-		// There is already a valid turndown node pool
-		if ktdm.provider.IsTurndownNodePool() {
-			return nil
-		}
-
-		// Create a new singleton node pool with a small instance capable of hosting the turndown
-		// pod -- this implementation will create and wait for the node to exist before returning
-		err := ktdm.provider.CreateSingletonNodePool()
-		if err != nil {
-			return err
-		}
-
-		// Lookup the turndown node in the kubernetes API
-		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: "kubecost-turndown-node=true",
-		})
-		if err != nil {
-			return err
-		}
-		tnode = &nodeList.Items[0]
-	} else {
-		// Otherwise, have the current pod move to autoscaling node pool
-		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
-
-		var targetNode *v1.Node
-		for _, node := range nodeList.Items {
-			poolID := ktdm.provider.GetPoolID(&node)
-			if poolID == autoScalingNodePool.NodePoolID {
-				targetNode = &node
-				break
-			}
-		}
-
-		if targetNode == nil {
-			return fmt.Errorf("Target node was not located for autoscaling cluster.")
-		}
-
-		// Patch and get the updated node
-		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "kubecost-turndown-node", "true")
-		if err != nil {
-			return err
-		}
-	}
-
-	// Patch Node with Taint
-	_, err = patcher.PatchNode(ktdm.client, *tnode, func(n *v1.Node) error {
-		taints := n.Spec.Taints
-		for _, taint := range taints {
-			if taint.Key == KubecostTurnDownTaintKey {
-				return patcher.NoUpdates
-			}
-		}
-
-		n.Spec.Taints = append(taints, v1.Taint{
-			Key:    KubecostTurnDownTaintKey,
-			Value:  "true",
-			Effect: v1.TaintEffectNoSchedule,
-		})
-
-		return nil
-	})
-
+	_, err := ktdm.strategy.CreateOrGetHostNode()
 	if err != nil {
 		return err
 	}
 
 	klog.V(3).Infoln("Node Taint was successfully added for kubecost-turndown.")
+
+	// NOTE: Need to investigate this a bit more. Sometimes, when we turn down, DNS
+	// NOTE: for the turndown pod seems to start failing. We should make sure we
+	// NOTE: continue to allow a dns service to run for the turndown pod.
+	err = ktdm.strategy.AllowKubeDNS()
+	if err != nil {
+		klog.Infof("Failed to allow kube-dns on master node: %s", err.Error())
+		return err
+	}
 
 	// Locate turndown namespace -- default to kubecost
 	ns := os.Getenv("TURNDOWN_NAMESPACE")
@@ -192,7 +111,14 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return err
 	}
 
+	// Patch the deployment of the turndown pod with a node selector for the target node as well as
+	// tolerations for the applied taint
 	_, err = patcher.PatchDeployment(ktdm.client, *deployment, func(d *appsv1.Deployment) error {
+		d.Spec.Template.Spec.Tolerations = append(d.Spec.Template.Spec.Tolerations, v1.Toleration{
+			Key:      ktdm.strategy.TaintKey(),
+			Effect:   v1.TaintEffectNoSchedule,
+			Operator: v1.TolerationOpExists,
+		})
 		d.Spec.Template.Spec.NodeSelector = map[string]string{
 			"kubecost-turndown-node": "true",
 		}
@@ -217,16 +143,16 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// 2. Use provider to get all node pools used for this cluster, determine
 	// whether or not there exists autoscaling node pools
 	var isAutoScalingCluster bool = false
-	pools := make(map[string]*NodePool)
+	pools := make(map[string]provider.NodePool)
 	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
 	}
 	for _, np := range nodePools {
-		if np.AutoScaling {
+		if np.AutoScaling() {
 			isAutoScalingCluster = true
 		}
-		pools[np.NodePoolID] = np
+		pools[np.Name()] = np
 	}
 
 	// If this cluster has autoscaling nodes, we consider the entire cluster
@@ -263,7 +189,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		if pool.AutoScaling {
+		if pool.AutoScaling() {
 			continue
 		}
 
@@ -277,9 +203,9 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	}
 
 	// 4. Filter out the current node pool holding the current node and/or autoscaling
-	targetPools := []*NodePool{}
+	targetPools := []provider.NodePool{}
 	for _, np := range nodePools {
-		if np.NodePoolID == currentNodePoolID || np.AutoScaling {
+		if np.Name() == currentNodePoolID || np.AutoScaling() {
 			continue
 		}
 
@@ -306,9 +232,9 @@ func (ktdm *KubernetesTurndownManager) loadNodePools() error {
 		return err
 	}
 
-	var nodePools []*NodePool
+	var nodePools []provider.NodePool
 	for _, pool := range pools {
-		autoscaling := pool.AutoScaling
+		autoscaling := pool.AutoScaling()
 
 		if autoscaling {
 			ktdm.autoScaling = &autoscaling

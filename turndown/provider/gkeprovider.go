@@ -1,15 +1,14 @@
-package turndown
+package provider
 
 import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/kubecost/kubecost-turndown/async"
+	"github.com/kubecost/kubecost-turndown/file"
 
 	gax "github.com/googleapis/gax-go/v2"
 	container "google.golang.org/genproto/googleapis/container/v1"
@@ -17,7 +16,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"cloud.google.com/go/compute/metadata"
 	gke "cloud.google.com/go/container/apiv1"
 
 	"k8s.io/klog"
@@ -35,41 +33,39 @@ var (
 	}
 )
 
-type ComputeProvider interface {
-	IsServiceAccountKey() bool
-	IsTurndownNodePool() bool
-	CreateSingletonNodePool() error
-	SetServiceAccount(key string) error
-	GetNodePools() ([]*NodePool, error)
-	GetPoolID(node *v1.Node) string
-	SetNodePoolSizes(nodePools []*NodePool, size int32) error
-	ResetNodePoolSizes(nodePools []*NodePool) error
+// NodePool contains a node pool identifier and the initial number of nodes
+// in the pool
+type GKENodePool struct {
+	name        string
+	project     string
+	zone        string
+	clusterID   string
+	min         int32
+	max         int32
+	count       int32
+	autoscaling bool
+	tags        map[string]string
 }
+
+func (np *GKENodePool) Name() string            { return np.name }
+func (np *GKENodePool) Project() string         { return np.project }
+func (np *GKENodePool) Zone() string            { return np.zone }
+func (np *GKENodePool) ClusterID() string       { return np.clusterID }
+func (np *GKENodePool) MinNodes() int32         { return np.min }
+func (np *GKENodePool) MaxNodes() int32         { return np.max }
+func (np *GKENodePool) NodeCount() int32        { return np.count }
+func (np *GKENodePool) AutoScaling() bool       { return np.autoscaling }
+func (np *GKENodePool) Tags() map[string]string { return np.tags }
 
 // ComputeProvider for GKE
 type GKEProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *gke.ClusterManagerClient
-	clusterID      string
-}
-
-// NodePool contains a node pool identifier and the initial number of nodes
-// in the pool
-type NodePool struct {
-	Project     string
-	Zone        string
-	ClusterID   string
-	NodePoolID  string
-	NodeCount   int32
-	AutoScaling bool
-}
-
-func (npc *NodePool) String() string {
-	return fmt.Sprintf("[Name: %s, Count: %d]", npc.NodePoolID, npc.NodeCount)
+	metadata       *GKEMetaData
 }
 
 func NewGKEProvider(kubernetes kubernetes.Interface) ComputeProvider {
-	clusterManager, err := newClusterManager()
+	clusterManager, err := newGKEClusterManager()
 	if err != nil {
 		klog.V(1).Infof("Failed to load service account.")
 	}
@@ -77,12 +73,12 @@ func NewGKEProvider(kubernetes kubernetes.Interface) ComputeProvider {
 	return &GKEProvider{
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
-		clusterID:      getClusterID(),
+		metadata:       NewGKEMetaData(),
 	}
 }
 
 func (p *GKEProvider) IsServiceAccountKey() bool {
-	return fileExists(GKEAuthServiceAccount)
+	return file.FileExists(GKEAuthServiceAccount)
 }
 
 func (p *GKEProvider) SetServiceAccount(key string) error {
@@ -91,7 +87,7 @@ func (p *GKEProvider) SetServiceAccount(key string) error {
 		return err
 	}
 
-	cm, err := newClusterManager()
+	cm, err := newGKEClusterManager()
 	if err != nil {
 		klog.V(1).Infof("Failed to create cluster manager: %s", err.Error())
 		return err
@@ -104,13 +100,14 @@ func (p *GKEProvider) SetServiceAccount(key string) error {
 }
 
 func (p *GKEProvider) IsTurndownNodePool() bool {
-
 	ctx := context.TODO()
 
+	klog.Infof("Project: %s, ClusterID: %s, Zone: %s", p.metadata.GetProjectID(), p.metadata.GetClusterID(), p.metadata.GetZone())
+
 	req := &container.GetNodePoolRequest{
-		ProjectId:  getProjectID(),
-		ClusterId:  p.clusterID,
-		Zone:       getZone(),
+		ProjectId:  p.metadata.GetProjectID(),
+		ClusterId:  p.metadata.GetClusterID(),
+		Zone:       p.metadata.GetZone(),
 		NodePoolId: "kubecost-turndown",
 	}
 
@@ -155,16 +152,16 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	}
 
 	resp, err := p.clusterManager.CreateNodePool(ctx, &container.CreateNodePoolRequest{
-		ProjectId: getProjectID(),
-		ClusterId: p.clusterID,
-		Zone:      getZone(),
+		ProjectId: p.metadata.GetProjectID(),
+		ClusterId: p.metadata.GetClusterID(),
+		Zone:      p.metadata.GetZone(),
 		NodePool:  nodePool,
 	})
 
 	if err != nil {
 		return err
 	}
-	klog.Infof("Create Singleton Node: %s", resp.GetStatus())
+	klog.V(1).Infof("Create Singleton Node: %s", resp.GetStatus())
 
 	err = WaitUntilNodeCreated(p.kubernetes, "kubecost-turndown-node", "true", "kubecost-turndown", 5*time.Second, 5*time.Minute)
 	if err != nil {
@@ -179,12 +176,12 @@ func (p *GKEProvider) GetPoolID(node *v1.Node) string {
 	return pool
 }
 
-func (p *GKEProvider) GetNodePools() ([]*NodePool, error) {
+func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	ctx := context.TODO()
 
-	projectID := getProjectID()
-	zone := getZone()
-	cluster := getClusterID()
+	projectID := p.metadata.GetProjectID()
+	zone := p.metadata.GetZone()
+	cluster := p.metadata.GetClusterID()
 
 	req := &container.ListNodePoolsRequest{
 		ProjectId: projectID,
@@ -198,34 +195,56 @@ func (p *GKEProvider) GetNodePools() ([]*NodePool, error) {
 		return nil, err
 	}
 
-	pools := []*NodePool{}
+	pools := []NodePool{}
 
 	for _, np := range resp.GetNodePools() {
-		pools = append(pools, &NodePool{
-			Project:     projectID,
-			ClusterID:   cluster,
-			Zone:        zone,
-			NodePoolID:  np.GetName(),
-			NodeCount:   np.GetInitialNodeCount(),
-			AutoScaling: np.Autoscaling.GetEnabled(),
+		nodeCount := np.GetInitialNodeCount()
+		autoscaling := np.Autoscaling.GetEnabled()
+
+		var min int32 = nodeCount
+		var max int32 = nodeCount
+		if autoscaling {
+			min = np.Autoscaling.GetMinNodeCount()
+			max = np.Autoscaling.GetMaxNodeCount()
+		}
+
+		tags := np.GetConfig().GetLabels()
+		if tags == nil {
+			tags = make(map[string]string)
+		}
+
+		pools = append(pools, &GKENodePool{
+			name:        np.GetName(),
+			project:     projectID,
+			clusterID:   cluster,
+			zone:        zone,
+			min:         min,
+			max:         max,
+			count:       nodeCount,
+			autoscaling: autoscaling,
+			tags:        tags,
 		})
 	}
 
 	return pools, nil
 }
 
-func (p *GKEProvider) SetNodePoolSizes(nodePools []*NodePool, size int32) error {
+func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			ProjectId:  nodePool.Project,
-			ClusterId:  nodePool.ClusterID,
-			Zone:       nodePool.Zone,
-			NodePoolId: nodePool.NodePoolID,
+			ProjectId:  nodePool.Project(),
+			ClusterId:  nodePool.ClusterID(),
+			Zone:       nodePool.Zone(),
+			NodePoolId: nodePool.Name(),
 			NodeCount:  size,
 		})
 
-		klog.V(3).Infof("Created Resize to 0 Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s", nodePool.Project, nodePool.ClusterID, nodePool.Zone, nodePool.NodePoolID)
+		klog.V(3).Infof("Created Resize to 0 Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
+			nodePool.Project(),
+			nodePool.ClusterID(),
+			nodePool.Zone(),
+			nodePool.Name())
 	}
 
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -265,23 +284,23 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []*NodePool, size int32) error 
 	}
 }
 
-func (p *GKEProvider) ResetNodePoolSizes(nodePools []*NodePool) error {
+func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			ProjectId:  nodePool.Project,
-			ClusterId:  nodePool.ClusterID,
-			Zone:       nodePool.Zone,
-			NodePoolId: nodePool.NodePoolID,
-			NodeCount:  nodePool.NodeCount,
+			ProjectId:  nodePool.Project(),
+			ClusterId:  nodePool.ClusterID(),
+			Zone:       nodePool.Zone(),
+			NodePoolId: nodePool.Name(),
+			NodeCount:  nodePool.NodeCount(),
 		})
 
 		klog.V(3).Infof("Created Resize to %d Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
-			nodePool.NodeCount,
-			nodePool.Project,
-			nodePool.ClusterID,
-			nodePool.Zone,
-			nodePool.NodePoolID)
+			nodePool.NodeCount(),
+			nodePool.Project(),
+			nodePool.ClusterID(),
+			nodePool.Zone(),
+			nodePool.Name())
 	}
 
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -337,8 +356,8 @@ func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string
 	return
 }
 
-func newClusterManager() (*gke.ClusterManagerClient, error) {
-	if !fileExists(GKEAuthServiceAccount) {
+func newGKEClusterManager() (*gke.ClusterManagerClient, error) {
+	if !file.FileExists(GKEAuthServiceAccount) {
 		return nil, fmt.Errorf("Failed to located service account file: %s", GKEAuthServiceAccount)
 	}
 
@@ -350,62 +369,4 @@ func newClusterManager() (*gke.ClusterManagerClient, error) {
 	}
 
 	return clusterManager, nil
-}
-
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
-}
-
-func getProjectID() string {
-	metadataClient := metadata.NewClient(&http.Client{
-		Transport: userAgentTransport{
-			userAgent: "kubecost-turndown",
-			base:      http.DefaultTransport,
-		},
-	})
-	projectID, err := metadataClient.ProjectID()
-	if err != nil {
-		klog.Infof("Error: %s", err.Error())
-		return ""
-	}
-
-	return projectID
-}
-
-func getClusterID() string {
-	metadataClient := metadata.NewClient(&http.Client{
-		Transport: userAgentTransport{
-			userAgent: "kubecost-turndown",
-			base:      http.DefaultTransport,
-		},
-	})
-
-	attribute, err := metadataClient.InstanceAttributeValue("cluster-name")
-	if err != nil {
-		klog.Infof("Error: %s", err.Error())
-		return ""
-	}
-
-	return attribute
-}
-
-func getZone() string {
-	metadataClient := metadata.NewClient(&http.Client{
-		Transport: userAgentTransport{
-			userAgent: "kubecost-turndown",
-			base:      http.DefaultTransport,
-		},
-	})
-
-	zone, err := metadataClient.Zone()
-	if err != nil {
-		klog.Infof("Error: %s", err.Error())
-		return ""
-	}
-
-	return zone
 }
