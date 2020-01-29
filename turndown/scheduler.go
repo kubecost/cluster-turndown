@@ -55,7 +55,7 @@ func NewSimpleScheduler() JobScheduler {
 	return &SimpleJobScheduler{
 		jobs:        make(map[string]*SimpleJob),
 		lock:        new(sync.Mutex),
-		runningJobs: NewConcurrentStringSet(),
+		runningJobs: async.NewConcurrentStringSet(),
 	}
 }
 
