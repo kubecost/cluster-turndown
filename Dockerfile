@@ -12,6 +12,7 @@ COPY main.go /app/main.go
 COPY turndown/ /app/turndown
 COPY async/ /app/async
 COPY file/ /app/file
+COPY logging/ /app/logging
 
 RUN go build -o main .
 

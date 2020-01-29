@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubecost/kubecost-turndown/async"
+
 	"github.com/google/uuid"
 	"k8s.io/klog"
 )
@@ -31,6 +33,7 @@ type JobScheduler interface {
 	Cancel(id string) bool
 	NextScheduledTimeFor(id string) (next time.Time, ok bool)
 	SetJobCompleteHandler(handler JobCompleteHandler)
+	IsRunning(jobID string) bool
 }
 
 type SimpleJob struct {
@@ -44,13 +47,15 @@ type SimpleJob struct {
 type SimpleJobScheduler struct {
 	jobs        map[string]*SimpleJob
 	lock        *sync.Mutex
+	runningJobs *async.ConcurrentStringSet
 	jobComplete JobCompleteHandler
 }
 
 func NewSimpleScheduler() JobScheduler {
 	return &SimpleJobScheduler{
-		jobs: make(map[string]*SimpleJob),
-		lock: new(sync.Mutex),
+		jobs:        make(map[string]*SimpleJob),
+		lock:        new(sync.Mutex),
+		runningJobs: NewConcurrentStringSet(),
 	}
 }
 
@@ -97,6 +102,10 @@ func (sjs *SimpleJobScheduler) NextScheduledTimeFor(id string) (time.Time, bool)
 // Sets the job complete handler. If one is already
 func (sjs *SimpleJobScheduler) SetJobCompleteHandler(handler JobCompleteHandler) {
 	sjs.jobComplete = handler
+}
+
+func (sjs *SimpleJobScheduler) IsRunning(jobID string) bool {
+	return sjs.runningJobs.Contains(jobID)
 }
 
 // Looks up a job by identifier.
@@ -156,6 +165,8 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 		// not overlap. We want the jobCompletion call to be able to create a new
 		// scheduled job
 		defer func() {
+			defer sjs.runningJobs.Remove(job.id)
+
 			sjs.removeJob(job.id)
 			if isCancelled {
 				return
@@ -170,6 +181,7 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 
 		select {
 		case <-time.After(remaining):
+			sjs.runningJobs.Add(job.id)
 			err = job.job()
 		case <-ctx.Done():
 			isCancelled = true
