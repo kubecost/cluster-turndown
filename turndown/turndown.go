@@ -31,10 +31,13 @@ type TurndownManager interface {
 	// or not
 	IsRunningOnTurndownNode() (bool, error)
 
-	// Prepares the turndown environment by creating a small single node pool, tainting
-	// the node, and then allow the current pod deployment such that it has tolerations
-	// and a node selector to run on the newly created node
+	// Prepares the turndown environment by creating or selecting a target host node,
+	// applying specific labeling to that host node such that we can run our turndown
+	// logic from a "safe-from-turndown" node
 	PrepareTurndownEnvironment() error
+
+	// Resets the turndown environment to what it was originally
+	ResetTurndownEnvironment() error
 
 	// Scales down the cluster leaving the single small node pool running the scheduled
 	// scale up
@@ -97,7 +100,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	// NOTE: Need to investigate this a bit more. Sometimes, when we turn down, DNS
 	// NOTE: for the turndown pod seems to start failing. We should make sure we
 	// NOTE: continue to allow a dns service to run for the turndown pod.
-	err = ktdm.strategy.AllowKubeDNS()
+	err = ktdm.strategy.UpdateDNS()
 	if err != nil {
 		ktdm.log.Err("Failed to allow kube-dns on master node: %s", err.Error())
 		return err
@@ -307,5 +310,44 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	ktdm.nodePools = nil
 	ktdm.autoScaling = nil
 
+	return nil
+}
+
+func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
+	// Only reset the turndown environment if the current strategy supports reversing...
+	if !ktdm.strategy.IsReversible() {
+		return nil
+	}
+
+	ktdm.log.Log("Resetting the Turndown Environment...")
+	err := ktdm.strategy.ReverseHostNode()
+	if err != nil {
+		return err
+	}
+
+	// Locate turndown namespace -- default to kubecost
+	ns := os.Getenv("TURNDOWN_NAMESPACE")
+	if ns == "" {
+		ns = "kubecost"
+	}
+
+	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
+
+	// Modify the Deployment for the Current Turndown Pod to include a node selector
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Patch the deployment of the turndown pod with a node selector for the target node as well as
+	// tolerations for the applied taint
+	_, err = patcher.PatchDeployment(ktdm.client, *deployment, func(d *appsv1.Deployment) error {
+		d.Spec.Template.Spec.Tolerations = []v1.Toleration{}
+		d.Spec.Template.Spec.NodeSelector = make(map[string]string)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }

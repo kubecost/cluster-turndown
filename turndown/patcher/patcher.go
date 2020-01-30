@@ -148,3 +148,16 @@ func UpdateNodeLabel(c kubernetes.Interface, node v1.Node, labelKey string, labe
 		return nil
 	})
 }
+
+//
+func DeleteNodeLabel(c kubernetes.Interface, node v1.Node, labelKey string) (*v1.Node, error) {
+	return PatchNode(c, node, func(n *v1.Node) error {
+		if len(n.Labels) == 0 {
+			return NoUpdates
+		}
+
+		delete(n.Labels, labelKey)
+
+		return nil
+	})
+}

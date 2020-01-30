@@ -3,6 +3,7 @@ package strategy
 import (
 	"fmt"
 
+	"github.com/kubecost/kubecost-turndown/logging"
 	"github.com/kubecost/kubecost-turndown/turndown/patcher"
 	"github.com/kubecost/kubecost-turndown/turndown/provider"
 
@@ -10,7 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
 )
 
 const (
@@ -20,13 +20,21 @@ const (
 type MasterlessTurndownStrategy struct {
 	client   kubernetes.Interface
 	provider provider.ComputeProvider
+	log      logging.NamedLogger
 }
 
 func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provider.ComputeProvider) TurndownStrategy {
 	return &MasterlessTurndownStrategy{
 		client:   client,
 		provider: provider,
+		log:      logging.NamedLogger("MasterlessStrategy"),
 	}
+}
+
+// Masterless strategy is currrently non-reversible. Need to determine whether there is value in
+// reprovisioning every turndown and deleting on scale up.
+func (mts *MasterlessTurndownStrategy) IsReversible() bool {
+	return false
 }
 
 func (mts *MasterlessTurndownStrategy) TaintKey() string {
@@ -59,7 +67,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 
 	// When AutoScaling is Not Enabled, Create a Turndown Node
 	if autoScalingNodePool == nil {
-		klog.V(1).Infof("Finite node backed cluster. Creating singleton nodepool for turndown.")
+		ktdm.log.Log("Finite node backed cluster. Creating singleton nodepool for turndown.")
 
 		// There isn't a node pool for the turndown pod, so create one
 		if !ktdm.provider.IsTurndownNodePool() {
@@ -125,8 +133,12 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 	})
 }
 
-func (mts *MasterlessTurndownStrategy) AllowKubeDNS() error {
+func (mts *MasterlessTurndownStrategy) UpdateDNS() error {
 	// No-op for this strategy, as we already use the critical addon taint for our target host
 	// node. Kube-DNS already has a toleration for critical addon.
 	return nil
+}
+
+func (mts *MasterlessTurndownStrategy) ReverseHostNode() error {
+	return fmt.Errorf("MasterlessTurndownStrategy::ReverseHostNode() is not yet implemented!")
 }

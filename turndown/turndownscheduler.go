@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/kubecost/kubecost-turndown/logging"
-	
+
 	"k8s.io/klog"
 )
 
@@ -18,6 +18,7 @@ const (
 
 	TurndownJobTypeScaleDown = "scaledown"
 	TurndownJobTypeScaleUp   = "scaleup"
+	TurndownJobTypeReset     = "reset"
 
 	TurndownJobRepeatNone   = "none"
 	TurndownJobRepeatDaily  = "daily"
@@ -301,6 +302,11 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 		return
 	}
 
+	// Reset Job Type -- Nothing Further to Reschedule
+	if jobType == TurndownJobTypeReset {
+		return
+	}
+
 	// Handle Errors
 	if err != nil {
 		// Schedule is written, this is simply waiting on the pod to move nodes, so we just ignore any rescheduling
@@ -313,6 +319,20 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 
 	// Reset the Last Completed JobType
 	ts.lastTypeCompleted = jobType
+
+	// Scale-Up requires a follow-up job to reset the cluster environment
+	// This is sort of a hack for now, as we want to ensure scale up completion before
+	// scheduling this reset
+	if jobType == TurndownJobTypeScaleUp {
+		_, err := ts.scheduler.Schedule(time.Now().Add(10*time.Second), ts.reset, map[string]string{
+			TurndownJobType:   TurndownJobTypeReset,
+			TurndownJobRepeat: TurndownJobRepeatNone,
+		})
+
+		if err != nil {
+			ts.log.Err("Failed to create reset job: %s", err.Error())
+		}
+	}
 
 	repeat, ok := metadata[TurndownJobRepeat]
 	if !ok || repeat == TurndownJobRepeatNone {
@@ -406,6 +426,13 @@ func (ts *TurndownScheduler) scaleDown() error {
 func (ts *TurndownScheduler) scaleUp() error {
 	klog.V(3).Info("-- Scale Up --")
 	err := ts.manager.ScaleUpCluster()
+
+	return err
+}
+
+func (ts *TurndownScheduler) reset() error {
+	klog.V(3).Info("-- Reset --")
+	err := ts.manager.ResetTurndownEnvironment()
 
 	return err
 }
