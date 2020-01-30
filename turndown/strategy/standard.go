@@ -100,6 +100,11 @@ func (sts *StandardTurndownStrategy) UpdateDNS() error {
 			}
 		}
 
+		d.Spec.Template.Spec.Tolerations = append(d.Spec.Template.Spec.Tolerations, v1.Toleration{
+			Key:      MasterNodeLabelKey,
+			Operator: v1.TolerationOpExists,
+		})
+
 		return nil
 	})
 
