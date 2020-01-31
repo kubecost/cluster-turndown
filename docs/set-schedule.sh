@@ -15,11 +15,12 @@ if [ "$?" == "1" ]; then
     exit 1
 fi
 
-service_ip=`kubectl get service kubecost-turndown-service -n kubecost -o jsonpath='{range.status.loadBalancer.ingress[0]}{.ip}{end}'`
-if [ "$service_ip" == "" ]; then
-    echo "The kubernetes service kubecost-turndown-service has not finished creating..."
-    exit 1
-fi
+service_ip=localhost
+#service_ip=`kubectl get service kubecost-turndown-service -n kubecost -o jsonpath='{range.status.loadBalancer.ingress[0]}{.ip}{end}'`
+#if [ "$service_ip" == "" ]; then
+#    echo "The kubernetes service kubecost-turndown-service has not finished creating..."
+#    exit 1
+#fi
 
 target_url=http://$service_ip:9731/schedule
 

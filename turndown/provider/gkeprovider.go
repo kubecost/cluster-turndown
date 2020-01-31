@@ -9,6 +9,7 @@ import (
 
 	"github.com/kubecost/kubecost-turndown/async"
 	"github.com/kubecost/kubecost-turndown/file"
+	"github.com/kubecost/kubecost-turndown/logging"
 
 	gax "github.com/googleapis/gax-go/v2"
 	container "google.golang.org/genproto/googleapis/container/v1"
@@ -25,6 +26,7 @@ const (
 	LabelGKENodePool      = "cloud.google.com/gke-nodepool"
 	GKECredsEnvVar        = "GOOGLE_APPLICATION_CREDENTIALS"
 	GKEAuthServiceAccount = "/var/keys/service-key.json"
+	GKETurndownPoolName   = "kubecost-turndown"
 )
 
 var (
@@ -62,6 +64,7 @@ type GKEProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *gke.ClusterManagerClient
 	metadata       *GKEMetaData
+	log            logging.NamedLogger
 }
 
 func NewGKEProvider(kubernetes kubernetes.Interface) ComputeProvider {
@@ -74,6 +77,7 @@ func NewGKEProvider(kubernetes kubernetes.Interface) ComputeProvider {
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
 		metadata:       NewGKEMetaData(),
+		log:            logging.NamedLogger("GKEProvider"),
 	}
 }
 
@@ -89,11 +93,11 @@ func (p *GKEProvider) SetServiceAccount(key string) error {
 
 	cm, err := newGKEClusterManager()
 	if err != nil {
-		klog.V(1).Infof("Failed to create cluster manager: %s", err.Error())
+		p.log.Err("Failed to create cluster manager: %s", err.Error())
 		return err
 	}
 
-	klog.V(3).Infof("Successfully created new cluster manager from service account")
+	p.log.Log("Successfully created new cluster manager from service account")
 
 	p.clusterManager = cm
 	return nil
@@ -102,13 +106,11 @@ func (p *GKEProvider) SetServiceAccount(key string) error {
 func (p *GKEProvider) IsTurndownNodePool() bool {
 	ctx := context.TODO()
 
-	klog.Infof("Project: %s, ClusterID: %s, Zone: %s", p.metadata.GetProjectID(), p.metadata.GetClusterID(), p.metadata.GetZone())
-
 	req := &container.GetNodePoolRequest{
 		ProjectId:  p.metadata.GetProjectID(),
 		ClusterId:  p.metadata.GetClusterID(),
 		Zone:       p.metadata.GetZone(),
-		NodePoolId: "kubecost-turndown",
+		NodePoolId: GKETurndownPoolName,
 	}
 
 	resp, err := p.clusterManager.GetNodePool(ctx, req)
@@ -123,12 +125,12 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	ctx := context.TODO()
 
 	nodePool := &container.NodePool{
-		Name: "kubecost-turndown",
+		Name: GKETurndownPoolName,
 		Config: &container.NodeConfig{
 			MachineType: "g1-small",
 			DiskSizeGb:  10,
 			Labels: map[string]string{
-				"kubecost-turndown-node": "true",
+				TurndownNodeLabel: "true",
 			},
 			OauthScopes: []string{
 				"https://www.googleapis.com/auth/cloud-platform",
@@ -161,9 +163,9 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	if err != nil {
 		return err
 	}
-	klog.V(1).Infof("Create Singleton Node: %s", resp.GetStatus())
+	p.log.Log("Create Singleton Node: %s", resp.GetStatus())
 
-	err = WaitUntilNodeCreated(p.kubernetes, "kubecost-turndown-node", "true", "kubecost-turndown", 5*time.Second, 5*time.Minute)
+	err = WaitUntilNodeCreated(p.kubernetes, TurndownNodeLabel, "true", GKETurndownPoolName, 5*time.Second, 5*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -188,7 +190,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 		Zone:      zone,
 		ClusterId: cluster,
 	}
-	klog.Infof("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
+	p.log.Log("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
 
 	resp, err := p.clusterManager.ListNodePools(ctx, req, options...)
 	if err != nil {
@@ -240,7 +242,7 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 			NodeCount:  size,
 		})
 
-		klog.V(3).Infof("Created Resize to 0 Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
+		p.log.Log("Resizing NodePool to 0 [Proj: %s, ClusterId: %s, Zone: %s, PoolID: %s]",
 			nodePool.Project(),
 			nodePool.ClusterID(),
 			nodePool.Zone(),
@@ -257,13 +259,13 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 			defer waitChannel.Done()
 
 			for {
-				resp, err := p.clusterManager.SetNodePoolSize(ctx, request, options...)
+				_, err := p.clusterManager.SetNodePoolSize(ctx, request, options...)
 				if err == nil {
-					klog.V(3).Infof("Response Status: %s", resp.GetStatus())
+					p.log.Log("Resized NodePool Successfully: %s", request.NodePoolId)
 					return
 				}
 
-				klog.V(3).Infof("Failed to execute request: %s", err.Error())
+				p.log.Log("NodePool operation already in queue, retrying...")
 
 				select {
 				case <-time.After(30 * time.Second):
@@ -295,7 +297,7 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 			NodeCount:  nodePool.NodeCount(),
 		})
 
-		klog.V(3).Infof("Created Resize to %d Request: Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s",
+		p.log.Log("Resizing NodePool to 0 %d [Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s]",
 			nodePool.NodeCount(),
 			nodePool.Project(),
 			nodePool.ClusterID(),
@@ -313,13 +315,14 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 			defer waitChannel.Done()
 
 			for {
-				resp, err := p.clusterManager.SetNodePoolSize(ctx, request, options...)
+				_, err := p.clusterManager.SetNodePoolSize(ctx, request, options...)
 				if err == nil {
-					klog.V(3).Infof("Response Status: %s", resp.GetStatus())
+					p.log.Log("Resized NodePool Successfully: %s", request.NodePoolId)
 					return
 				}
 
-				klog.V(3).Infof("Failed to execute request to reset node pool size: %s", err.Error())
+				p.log.Log("NodePool operation already in queue, retrying...")
+
 				select {
 				case <-time.After(30 * time.Second):
 				case <-ctx.Done():
