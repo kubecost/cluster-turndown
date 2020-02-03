@@ -273,8 +273,14 @@ func (ts *TurndownScheduler) Cancel(force bool) error {
 
 		err := ts.manager.ScaleUpCluster()
 		if err != nil {
-			return err
+			ts.log.Err("Failed to ScaleUp after Cancel: %s", err.Error())
 		}
+
+		// Schedule Reset after ScaleUp
+		_, err = ts.scheduler.Schedule(time.Now().Add(5*time.Minute), ts.reset, map[string]string{
+			TurndownJobType:   TurndownJobTypeReset,
+			TurndownJobRepeat: TurndownJobRepeatNone,
+		})
 	}
 
 	return nil
@@ -324,7 +330,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 	// This is sort of a hack for now, as we want to ensure scale up completion before
 	// scheduling this reset
 	if jobType == TurndownJobTypeScaleUp {
-		_, err := ts.scheduler.Schedule(time.Now().Add(10*time.Second), ts.reset, map[string]string{
+		_, err := ts.scheduler.Schedule(time.Now().Add(5*time.Minute), ts.reset, map[string]string{
 			TurndownJobType:   TurndownJobTypeReset,
 			TurndownJobRepeat: TurndownJobRepeatNone,
 		})

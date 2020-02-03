@@ -134,5 +134,39 @@ func (sts *StandardTurndownStrategy) ReverseHostNode() error {
 
 	// Patch and get the updated node
 	_, err = patcher.DeleteNodeLabel(sts.client, *masterNode, "kubecost-turndown-node")
+
+	dns, err := sts.client.AppsV1().Deployments("kube-system").Get("kube-dns", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	_, err = patcher.PatchDeployment(sts.client, *dns, func(d *appsv1.Deployment) error {
+		tolerationAnnotation := `[{"key":"CriticalAddonsOnly", "operator":"Exists"}]`
+
+		if d.Annotations != nil {
+			d.Annotations[SchedulerTolerationAnnotation] = tolerationAnnotation
+		} else {
+			d.Annotations = map[string]string{
+				SchedulerTolerationAnnotation: tolerationAnnotation,
+			}
+		}
+
+		if d.Spec.Template.Annotations != nil {
+			d.Spec.Template.Annotations[SchedulerTolerationAnnotation] = tolerationAnnotation
+		} else {
+			d.Spec.Template.Annotations = map[string]string{
+				SchedulerTolerationAnnotation: tolerationAnnotation,
+			}
+		}
+
+		d.Spec.Template.Spec.Tolerations = []v1.Toleration{}
+
+		return nil
+	})
+
+	sts.client.CoreV1().Pods("kube-system").DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
+		LabelSelector: "k8s-app=kube-dns",
+	})
+
 	return err
 }
