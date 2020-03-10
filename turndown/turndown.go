@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/kubecost/kubecost-turndown/logging"
 	"github.com/kubecost/kubecost-turndown/turndown/patcher"
 	"github.com/kubecost/kubecost-turndown/turndown/provider"
 	"github.com/kubecost/kubecost-turndown/turndown/strategy"
@@ -30,10 +31,13 @@ type TurndownManager interface {
 	// or not
 	IsRunningOnTurndownNode() (bool, error)
 
-	// Prepares the turndown environment by creating a small single node pool, tainting
-	// the node, and then allow the current pod deployment such that it has tolerations
-	// and a node selector to run on the newly created node
+	// Prepares the turndown environment by creating or selecting a target host node,
+	// applying specific labeling to that host node such that we can run our turndown
+	// logic from a "safe-from-turndown" node
 	PrepareTurndownEnvironment() error
+
+	// Resets the turndown environment to what it was originally
+	ResetTurndownEnvironment() error
 
 	// Scales down the cluster leaving the single small node pool running the scheduled
 	// scale up
@@ -50,6 +54,7 @@ type KubernetesTurndownManager struct {
 	currentNode string
 	autoScaling *bool
 	nodePools   []provider.NodePool
+	log         logging.NamedLogger
 }
 
 func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.ComputeProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
@@ -59,6 +64,7 @@ func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider
 		strategy:    strategy,
 		currentNode: currentNode,
 		autoScaling: nil,
+		log:         logging.NamedLogger("Turndown"),
 	}
 }
 
@@ -83,19 +89,20 @@ func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
 }
 
 func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
+	ktdm.log.Log("Creating or Getting the Target Host Node...")
 	_, err := ktdm.strategy.CreateOrGetHostNode()
 	if err != nil {
 		return err
 	}
 
-	klog.V(3).Infoln("Node Taint was successfully added for kubecost-turndown.")
+	ktdm.log.Log("Fixing DNS if applicable...")
 
 	// NOTE: Need to investigate this a bit more. Sometimes, when we turn down, DNS
 	// NOTE: for the turndown pod seems to start failing. We should make sure we
 	// NOTE: continue to allow a dns service to run for the turndown pod.
-	err = ktdm.strategy.AllowKubeDNS()
+	err = ktdm.strategy.UpdateDNS()
 	if err != nil {
-		klog.Infof("Failed to allow kube-dns on master node: %s", err.Error())
+		ktdm.log.Err("Failed to allow kube-dns on master node: %s", err.Error())
 		return err
 	}
 
@@ -104,6 +111,8 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	if ns == "" {
 		ns = "kubecost"
 	}
+
+	ktdm.log.Log("Applying Tolerations and Node Selector to turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
 	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
@@ -128,12 +137,12 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return err
 	}
 
-	klog.V(3).Infoln("Kubecost-Turndown Deployment successfully updated with node selector")
-
 	return nil
 }
 
 func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
+	ktdm.log.Log("Scaling Down Cluster Now")
+
 	// 1. Start by finding all the nodes that Kubernetes is using
 	nodes, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
@@ -160,12 +169,16 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// to 0 replicas. Otherwise, just suspend cron jobs
 	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if isAutoScalingCluster {
+		ktdm.log.Log("Found Cluster-AutoScaler. Flattening Cluster...")
+
 		err := flattener.Flatten()
 		if err != nil {
 			klog.V(1).Infof("Failed to flatten cluster: %s", err.Error())
 			return err
 		}
 	} else {
+		ktdm.log.Log("Suspending all jobs...")
+
 		err := flattener.SuspendJobs()
 		if err != nil {
 			klog.V(1).Infof("Failed to suspend jobs: %s", err.Error())
@@ -185,7 +198,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 
 		pool, ok := pools[poolID]
 		if !ok {
-			klog.V(1).Infof("Failed to locate pool id: %s in pools map.", poolID)
+			ktdm.log.Err("Failed to locate pool id: %s in pools map.", poolID)
 			continue
 		}
 
@@ -193,12 +206,10 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		klog.V(3).Infof("Draining Node: %s", n.Name)
 		draininator := NewDraininator(ktdm.client, n.Name)
-
 		err = draininator.Drain()
 		if err != nil {
-			klog.V(1).Infof("Failed: %s - Error: %s", n.Name, err.Error())
+			ktdm.log.Err("Failed: %s - Error: %s", n.Name, err.Error())
 		}
 	}
 
@@ -215,6 +226,8 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// Set NodePools on instance for resetting/upscaling
 	ktdm.nodePools = targetPools
 	ktdm.autoScaling = &isAutoScalingCluster
+
+	ktdm.log.Log("Resizing all non-autoscaling node groups to 0...")
 
 	// 5. Resize all the non-autoscaling node pools to 0
 	err = ktdm.provider.SetNodePoolSizes(targetPools, 0)
@@ -252,15 +265,21 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	// If for some reason, we're trying to scale up, but there weren't
 	// any node pools set from downscale, try to load them
 	if len(ktdm.nodePools) == 0 {
+		ktdm.log.Log("NodeGroups Require Loading. Loading now...")
+
 		if err := ktdm.loadNodePools(); err != nil {
+			ktdm.log.Err("Failed to load NodeGroups")
 			return err
 		}
 
 		// Check Again
 		if len(ktdm.nodePools) == 0 {
+			ktdm.log.Err("Failed to load NodeGroups")
 			return fmt.Errorf("Failed to locate any node pools to scale up.")
 		}
 	}
+
+	ktdm.log.Log("Resetting all NodeGroup sizes to pre-turndown capacity...")
 
 	// 2. Set NodePool sizes back to what they were previously
 	err := ktdm.provider.ResetNodePoolSizes(ktdm.nodePools)
@@ -271,11 +290,15 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	// 3. Expand Autoscaling Nodes or Resume Jobs
 	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if ktdm.autoScaling != nil && *ktdm.autoScaling {
+		ktdm.log.Log("Expanding Cluster...")
+
 		err := flattener.Expand()
 		if err != nil {
 			return err
 		}
 	} else {
+		ktdm.log.Log("Resuming Jobs...")
+
 		err := flattener.ResumeJobs()
 		if err != nil {
 			return err
@@ -287,5 +310,44 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	ktdm.nodePools = nil
 	ktdm.autoScaling = nil
 
+	return nil
+}
+
+func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
+	// Only reset the turndown environment if the current strategy supports reversing...
+	if !ktdm.strategy.IsReversible() {
+		return nil
+	}
+
+	ktdm.log.Log("Resetting the Turndown Environment...")
+	err := ktdm.strategy.ReverseHostNode()
+	if err != nil {
+		return err
+	}
+
+	// Locate turndown namespace -- default to kubecost
+	ns := os.Getenv("TURNDOWN_NAMESPACE")
+	if ns == "" {
+		ns = "kubecost"
+	}
+
+	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
+
+	// Modify the Deployment for the Current Turndown Pod to include a node selector
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Patch the deployment of the turndown pod with a node selector for the target node as well as
+	// tolerations for the applied taint
+	_, err = patcher.PatchDeployment(ktdm.client, *deployment, func(d *appsv1.Deployment) error {
+		d.Spec.Template.Spec.Tolerations = []v1.Toleration{}
+		d.Spec.Template.Spec.NodeSelector = make(map[string]string)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }

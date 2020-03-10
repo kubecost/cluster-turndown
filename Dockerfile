@@ -1,10 +1,11 @@
   
 FROM golang:latest as build-env
 
+RUN mkdir /app
 WORKDIR /app
 COPY go.mod go.sum ./
 
-# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
+# Get dependencies - will also be cached if we won't change mod/sum
 RUN go mod download
 
 # COPY the source code as the last step
@@ -12,11 +13,26 @@ COPY main.go /app/main.go
 COPY turndown/ /app/turndown
 COPY async/ /app/async
 COPY file/ /app/file
+COPY logging/ /app/logging
+COPY .git/ /app/.git
 
-RUN go build -o main .
+# Build the binary
+RUN set -e ;\
+    GIT_COMMIT=`git rev-parse HEAD` ;\
+    GIT_DIRTY='' ;\
+    # for our purposes, we only care about dirty .go files ;\
+    if test -n "`git status --porcelain --untracked-files=no | grep '\.go'`"; then \
+      GIT_DIRTY='+dirty' ;\
+    fi ;\
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -a -installsuffix cgo \
+        -ldflags "-X main.gitCommit=${GIT_COMMIT}${GIT_DIRTY}" \
+        -o /go/bin/app
 
-RUN find . -type f -name '*.go' -exec rm {} +
+FROM alpine:3.10.2
+RUN apk add --update --no-cache ca-certificates
+COPY --from=build-env /go/bin/app /go/bin/app
 
 EXPOSE 9731
 
-CMD ["./main"]
+ENTRYPOINT ["/go/bin/app"]

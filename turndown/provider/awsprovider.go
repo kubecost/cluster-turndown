@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kubecost/kubecost-turndown/file"
+	"github.com/kubecost/kubecost-turndown/logging"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,6 +59,7 @@ type AccessKey struct {
 type AWSProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *autoscaling.AutoScaling
+	log            logging.NamedLogger
 }
 
 func NewAWSProvider(kubernetes kubernetes.Interface) ComputeProvider {
@@ -70,6 +72,7 @@ func NewAWSProvider(kubernetes kubernetes.Interface) ComputeProvider {
 	return &AWSProvider{
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
+		log:            logging.NamedLogger("AWSProvider"),
 	}
 }
 
@@ -86,11 +89,11 @@ func (p *AWSProvider) SetServiceAccount(key string) error {
 	region := findAWSRegion(p.kubernetes)
 	cm, err := newAWSClusterManager(region)
 	if err != nil {
-		klog.V(1).Infof("Failed to create cluster manager: %s", err.Error())
+		p.log.Err("Failed to create cluster manager: %s", err.Error())
 		return err
 	}
 
-	klog.V(3).Infof("Successfully created new cluster manager from service account")
+	p.log.Log("Successfully created new cluster manager from service account")
 
 	p.clusterManager = cm
 	return nil
@@ -164,7 +167,7 @@ func (p *AWSProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 
 		_, err := p.clusterManager.UpdateAutoScalingGroup(update)
 		if err != nil {
-			klog.V(1).Infof("[Error] %s", err.Error())
+			p.log.Err("Updating AutoScalingGroup: %s", err.Error())
 			return err
 		}
 
@@ -183,7 +186,7 @@ func (p *AWSProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 
 		_, err = p.clusterManager.CreateOrUpdateTags(tagsIn)
 		if err != nil {
-			klog.V(1).Infof("[Error] Creating or Updating Tags: %s", err.Error())
+			p.log.Err("Creating or Updating Tags: %s", err.Error())
 
 			return err
 		}
@@ -199,13 +202,13 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 		tags := np.Tags()
 		rangeTag, ok := tags[AWSNodeGroupPreviousKey]
 		if !ok {
-			klog.V(1).Infof("Failed to locate tag: %s for NodePool: %s", AWSNodeGroupPreviousKey, np.Name())
+			p.log.Err("Failed to locate tag: %s for NodePool: %s", AWSNodeGroupPreviousKey, np.Name())
 			continue
 		}
 
 		min, max, count := expandRange(rangeTag)
 		if count < 0 {
-			klog.V(1).Infof("Failed to parse range used to resize node pool.")
+			p.log.Err("Failed to parse range used to resize node pool.")
 			continue
 		}
 
@@ -218,7 +221,7 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 
 		_, err := p.clusterManager.UpdateAutoScalingGroup(update)
 		if err != nil {
-			klog.V(1).Infof("[Error] %s", err.Error())
+			p.log.Err("Updating AutoScalingGroup: %s", err.Error())
 			return err
 		}
 
@@ -234,7 +237,7 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 
 		_, err = p.clusterManager.DeleteTags(deleteTagsIn)
 		if err != nil {
-			klog.V(1).Infof("[Error] Deleting Tags: %s", err.Error())
+			p.log.Err("Deleting Tags: %s", err.Error())
 
 			return err
 		}
@@ -298,23 +301,24 @@ func flatRange(min, max, count int32) *string {
 }
 
 func expandRange(s string) (int64, int64, int64) {
+	log := logging.NamedLogger("AWSProvider")
 	values := strings.Split(s, "/")
 
 	count, err := strconv.Atoi(values[2])
 	if err != nil {
-		klog.V(1).Infof("[Error] Parsing Count: %s", err.Error())
+		log.Err("Parsing Count: %s", err.Error())
 		return -1, -1, -1
 	}
 
 	min, err := strconv.Atoi(values[0])
 	if err != nil {
-		klog.V(1).Infof("[Error] Parsing Min: %s", err.Error())
+		log.Err("Parsing Min: %s", err.Error())
 		min = count
 	}
 
 	max, err := strconv.Atoi(values[1])
 	if err != nil {
-		klog.V(1).Infof("[Error] Parsing Max: %s", err.Error())
+		log.Err("Parsing Max: %s", err.Error())
 		max = count
 	}
 
@@ -323,14 +327,15 @@ func expandRange(s string) (int64, int64, int64) {
 
 func findAWSRegion(c kubernetes.Interface) string {
 	// Locate AWS region -- TODO: Use metadata?
+	log := logging.NamedLogger("AWSProvider")
 	nodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
-		klog.V(1).Infof("[Error] Failed to locate AWS Region: %s", err.Error())
+		log.Err("Failed to locate AWS Region: %s", err.Error())
 		return ""
 	}
 
 	if len(nodes.Items) == 0 {
-		klog.V(1).Infof("[Error] Failed to locate any kubernetes nodes.")
+		log.Err("Failed to locate any kubernetes nodes.")
 		return ""
 	}
 

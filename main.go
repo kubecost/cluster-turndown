@@ -44,7 +44,7 @@ func initKubernetes() kubernetes.Interface {
 }
 
 // For now, we'll choose our strategy based on the provider, but functionally, there is
-// no dependency. T
+// no dependency.
 func strategyForProvider(c kubernetes.Interface, p provider.ComputeProvider) (strategy.TurndownStrategy, error) {
 	switch v := p.(type) {
 	case *provider.GKEProvider:

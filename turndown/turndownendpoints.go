@@ -96,7 +96,7 @@ func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	err := te.scheduler.Cancel()
+	err := te.scheduler.Cancel(false)
 	if err != nil {
 		w.Write(wrapData(nil, err))
 		return

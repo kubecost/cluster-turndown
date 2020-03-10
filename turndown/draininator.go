@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kubecost/kubecost-turndown/async"
+	"github.com/kubecost/kubecost-turndown/logging"
 	"github.com/kubecost/kubecost-turndown/turndown/patcher"
 
 	v1 "k8s.io/api/core/v1"
@@ -18,8 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-
-	"k8s.io/klog"
 )
 
 const (
@@ -41,6 +40,7 @@ type Draininator struct {
 	force              bool
 	ignoreDaemonSets   bool
 	deleteLocalData    bool
+	log                logging.NamedLogger
 }
 
 // PodFilter definition which is used to determine which pods to evict from a node.
@@ -57,11 +57,13 @@ func NewDraininator(client kubernetes.Interface, node string) *Draininator {
 		force:              true,
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
+		log:                logging.NamedLogger("Draininator"),
 	}
 }
 
 // Cordons the node, then evicts pods from the node that qualify.
 func (d *Draininator) Drain() error {
+	d.log.Log("Draining Node: %s", d.node)
 	err := d.CordonNode()
 	if err != nil {
 		return err
@@ -72,11 +74,13 @@ func (d *Draininator) Drain() error {
 		return err
 	}
 
-	klog.V(3).Infof("Node: %s was Drained Successfully", d.node)
+	d.log.Log("Node: %s was Drained Successfully", d.node)
 	return nil
 }
 
 func (d *Draininator) CordonNode() error {
+	d.log.SLog("Cordoning Node: %s", d.node)
+
 	node, err := d.client.CoreV1().Nodes().Get(d.node, metav1.GetOptions{})
 	if err != nil {
 		return err
@@ -101,9 +105,11 @@ func (d *Draininator) DeletePodsOnNode() error {
 	}
 
 	if pods == nil || len(pods) == 0 {
-		klog.V(3).Infof("There are no pods to evict on the drained node.")
+		d.log.SLog("There are no pods to evict on the drained node.")
 		return nil
 	}
+
+	d.log.SLog("Found %d pods to be deleted...", len(pods))
 
 	policyGroupVersion, err := IsEvictionAvailable(d.client)
 	if err != nil {
@@ -181,24 +187,24 @@ func (d *Draininator) daemonSetFilter(pod v1.Pod) (bool, error) {
 	// Check to see if that controller is a daemonset
 	if _, err := d.client.AppsV1().DaemonSets(pod.Namespace).Get(controllerRef.Name, metav1.GetOptions{}); err != nil {
 		if k8serrors.IsNotFound(err) && d.force {
-			klog.Warningf("pod %s.%s is controlled by a DaemonSet but the DaemonSet is not found", pod.Namespace, pod.Name)
+			d.log.Debug("pod %s.%s is controlled by a DaemonSet but the DaemonSet is not found", pod.Namespace, pod.Name)
 			return true, nil
 		}
 		return false, err
 	}
 
 	if !d.ignoreDaemonSets {
-		return false, errors.New(fmt.Sprintf("pod %s.%s is controlled by a DaemonSet, node cannot be drained.", pod.Namespace, pod.Name))
+		return false, fmt.Errorf("pod %s.%s is controlled by a DaemonSet, node cannot be drained.", pod.Namespace, pod.Name)
 	}
 
-	klog.Warningf("pod %s.%s is controlled by a DaemonSet, it won't be deleted", pod.Namespace, pod.Name)
+	d.log.SLog("Pod %s.%s is controlled by a DaemonSet. Ignoring.", pod.Namespace, pod.Name)
 	return false, nil
 }
 
 // PodFilter to determine which pods are kube system mirrors
 func (d *Draininator) mirrorFilter(pod v1.Pod) (bool, error) {
 	if _, found := pod.ObjectMeta.Annotations[v1.MirrorPodAnnotationKey]; found {
-		klog.Warningf("%s.%s is a mirror pod, it won't be deleted", pod.Namespace, pod.Name)
+		d.log.Debug("%s.%s is a mirror pod, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
 	}
 	return true, nil
@@ -208,7 +214,7 @@ func (d *Draininator) mirrorFilter(pod v1.Pod) (bool, error) {
 func (d *Draininator) autoscalerFilter(pod v1.Pod) (bool, error) {
 	enabled, found := pod.ObjectMeta.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"]
 	if found && enabled == "false" {
-		klog.Warningf("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
+		d.log.Debug("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
 	}
 
@@ -231,7 +237,7 @@ func (d *Draininator) localStorageFilter(pod v1.Pod) (bool, error) {
 		return false, fmt.Errorf("pod %s.%s has local storage, node cannot be drained.", pod.Namespace, pod.Name)
 	}
 
-	klog.Warningf("pod %s.%s has local storage, and it will be deleted because deleteLocalData is set", pod.Namespace, pod.Name)
+	d.log.SLog("Pod %s.%s has local storage. Force removing...", pod.Namespace, pod.Name)
 	return true, nil
 }
 
@@ -250,7 +256,7 @@ func (d *Draininator) unreplicatedFilter(pod v1.Pod) (bool, error) {
 		return false, fmt.Errorf("pod %s.%s is unreplicated, node cannot be drained (set force=true to drain)", pod.Namespace, pod.Name)
 	}
 
-	klog.Warningf("pod %s.%s is unreplicated, but it will be deleted because force is set", pod.Namespace, pod.Name)
+	d.log.SLog("Pod %s.%s does not have a controller. Force removing...", pod.Namespace, pod.Name)
 	return true, nil
 }
 
@@ -310,7 +316,7 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 
 			err := WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
 			if err != nil {
-				klog.V(1).Infof("Failed to wait for pod deletion: %s", err.Error())
+				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
 			}
 		}(pod)
 	}
@@ -366,7 +372,7 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 
 				// Error other than TooManyRequests
 				if !k8serrors.IsTooManyRequests(err) {
-					klog.V(1).Infof("Error Evicting Pod: %s - %s", pod.Name, err.Error())
+					d.log.Err("Error Evicting Pod: %s - %s", pod.Name, err.Error())
 					return
 				}
 
@@ -376,7 +382,7 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 
 			err = WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
 			if err != nil {
-				klog.V(1).Infof("Failed to wait for pod deletion: %s", err.Error())
+				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
 			}
 		}(p)
 	}
@@ -394,7 +400,7 @@ func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, time
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
 		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
 		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
-			klog.V(3).Infof("Pod %s.%s is deleted", pod.Namespace, pod.Name)
+			logging.NamedLogger("Draininator").SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
 			return true, nil
 		}
 		return false, err

@@ -17,6 +17,10 @@ import (
 	"k8s.io/klog"
 )
 
+const (
+	TurndownNodeLabel = "kubecost-turndown-node"
+)
+
 type UserAgentTransport struct {
 	userAgent string
 	base      http.RoundTripper
