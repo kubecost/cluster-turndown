@@ -29,6 +29,7 @@ if [ "$PROJECT_ID" == "" ] || [ "$SERVICE_ACCOUNT_NAME" == "" ]; then
     exit 1
 fi
 
+# Generate a yaml input with desired permissions for running turndown on GKE
 cat <<EOF > kubecost-turndown-role.yaml
 title: "Kubecost Turndown"
 description: "Permissions needed to run kubecost turndown on GKE"
@@ -48,9 +49,11 @@ includedPermissions:
 - container.nodes.updateStatus
 EOF
 
+# Create a new Role using the permissions listened in the yaml and remove permissions yaml
 gcloud iam roles create kubecost.turndown --project $PROJECT_ID --file kubecost-turndown-role.yaml
 rm -f kubecost-turndown-role.yaml
 
+# Create a new service account with the provided inputs and assign the new role
 gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name $SERVICE_ACCOUNT_NAME --format json && \
     gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/kubecost.turndown && \
     gcloud iam service-accounts keys create $DIR/service-key.json --iam-account $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
@@ -71,10 +74,5 @@ if [ "$?" == "0" ]; then
     kubectl delete secret kubecost-turndown-service-key -n kubecost 
 fi
 
+# Create the Secret containing the service key
 kubectl create secret generic kubecost-turndown-service-key -n kubecost --from-file=$DIR/service-key.json
-
-# We could have this script go ahead and have this script run kubectl apply...
-# kubectl apply -f kubernetes/kubecost-turndown.yaml
-# watch -g -n 5 "kubectl get service kubecost-turndown-service -n kubecost -o jsonpath='{range.status.loadBalancer.ingress[0]}{.ip}{end}'"
-# service_ip=`kubectl get service kubecost-turndown-service -n kubecost -o jsonpath='{range.status.loadBalancer.ingress[0]}{.ip}{end}'`
-# echo "Use curl to POST to http://$service_ip:9731/schedule"
