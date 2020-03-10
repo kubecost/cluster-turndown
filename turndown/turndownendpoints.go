@@ -46,7 +46,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 	if r.Method == http.MethodGet {
 		schedule := te.scheduler.GetSchedule()
 		if schedule == nil {
-			w.Write(wrapData(nil, fmt.Errorf("No schedule available.")))
+			w.Write(wrapData(struct{}{}, nil))
 			return
 		}
 
