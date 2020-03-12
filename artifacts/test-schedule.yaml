@@ -1,0 +1,10 @@
+apiVersion: kubecost.k8s.io/v1alpha1
+kind: TurndownSchedule
+metadata:
+  name: test-schedule
+  finalizers:
+  - "finalizer.kubecost.k8s.io"
+spec:
+  start: 2020-03-12T20:30:00Z
+  end: 2020-03-12T21:00:00Z
+  repeat: none
