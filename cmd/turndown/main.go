@@ -103,7 +103,7 @@ func strategyForProvider(c kubernetes.Interface, p provider.ComputeProvider) (st
 
 func main() {
 	klog.InitFlags(nil)
-	flag.Set("v", "5")
+	flag.Set("v", "3")
 	flag.Parse()
 
 	stopCh := signals.SetupSignalHandler()
