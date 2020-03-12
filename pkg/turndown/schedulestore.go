@@ -126,6 +126,7 @@ func (kss *KubernetesScheduleStore) Complete() {
 		if td.Status.State == ScheduleStateSuccess {
 			tdCopy := td.DeepCopy()
 			tdCopy.Status.State = ScheduleStateCompleted
+			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
 			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(tdCopy)
 			return
@@ -143,6 +144,7 @@ func (kss *KubernetesScheduleStore) Clear() {
 		if td.Status.State == ScheduleStateSuccess {
 			tdCopy := td.DeepCopy()
 			tdCopy.Status.State = ScheduleStateCompleted
+			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
 			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(tdCopy)
 			return
