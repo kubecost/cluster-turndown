@@ -9,11 +9,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # COPY the source code as the last step
-COPY main.go /app/main.go
-COPY turndown/ /app/turndown
-COPY async/ /app/async
-COPY file/ /app/file
-COPY logging/ /app/logging
+COPY cmd/ /app/cmd
+COPY pkg/ /app/pkg
 COPY .git/ /app/.git
 
 # Build the binary
@@ -24,6 +21,7 @@ RUN set -e ;\
     if test -n "`git status --porcelain --untracked-files=no | grep '\.go'`"; then \
       GIT_DIRTY='+dirty' ;\
     fi ;\
+    cd cmd/turndown;\
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -a -installsuffix cgo \
         -ldflags "-X main.gitCommit=${GIT_COMMIT}${GIT_DIRTY}" \
