@@ -1,4 +1,4 @@
-VERSION=v4.0
+VERSION=v4.1-SNAPSHOT
 REGISTRY=gcr.io
 PROJECT_ID=kubecost1
 APPNAME=kubecost-turndown
