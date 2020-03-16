@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/async"
-	"github.com/kubecost/kubecost-turndown/pkg/file"
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/file"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	gax "github.com/googleapis/gax-go/v2"
 	container "google.golang.org/genproto/googleapis/container/v1"
@@ -213,6 +213,10 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 }
 
 func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
@@ -268,6 +272,10 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 }
 
 func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{

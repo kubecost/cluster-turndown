@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"
@@ -17,7 +17,13 @@ import (
 	"k8s.io/klog"
 )
 
-const KubecostTurnDownJobSuspend = "kubecost.kubernetes.io/job-suspend"
+const (
+	ClusterAutoScalerSafeEvict    = "cluster-autoscaler.kubernetes.io/safe-to-evict"
+	KubecostTurnDownReplicas      = "kubecost.kubernetes.io/turn-down-replicas"
+	KubecostTurnDownRollout       = "kubecost.kubernetes.io/turn-down-rollout"
+	KubecostTurnDownSafeEvictFlag = "kubecost.kubernetes.io/safe-evict"
+	KubecostTurnDownJobSuspend    = "kubecost.kubernetes.io/job-suspend"
+)
 
 // Flattener is the type used to set specific kubernetes annotations and configurations\
 // to entice the autoscaler to downscale the cluster.
@@ -82,6 +88,66 @@ func (d *Flattener) Expand() error {
 	}
 
 	return nil
+}
+
+// Test to determine if any of the cluster components have been flattened.
+func (d *Flattener) IsClusterFlattened() bool {
+	deployments, err := d.client.AppsV1().Deployments("").List(metav1.ListOptions{})
+	if err != nil {
+		d.log.Warn("Failed to fetch deployments: %s", err.Error())
+	} else {
+		for _, deployment := range deployments.Items {
+			if d.isOmitted(&deployment) {
+				continue
+			}
+			if deployment.Annotations == nil {
+				continue
+			}
+
+			if _, ok := deployment.Annotations[KubecostTurnDownSafeEvictFlag]; ok {
+				return true
+			}
+			if _, ok := deployment.Annotations[KubecostTurnDownReplicas]; ok {
+				return true
+			}
+			if _, ok := deployment.Annotations[KubecostTurnDownRollout]; ok {
+				return true
+			}
+		}
+	}
+
+	daemonSets, err := d.client.AppsV1().DaemonSets("").List(metav1.ListOptions{})
+	if err != nil {
+		d.log.Warn("Failed to fetch daemonsets: %s", err.Error())
+	} else {
+		for _, daemonSet := range daemonSets.Items {
+			if daemonSet.Annotations == nil {
+				continue
+			}
+
+			if _, ok := daemonSet.Annotations[KubecostTurnDownSafeEvictFlag]; ok {
+				return true
+			}
+		}
+	}
+
+	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
+	if err != nil {
+		d.log.Warn("Failed to fetch jobs: %s", err.Error())
+	} else {
+		for _, job := range jobsList.Items {
+			if job.Annotations == nil {
+				continue
+			}
+
+			if _, ok := job.Annotations[KubecostTurnDownJobSuspend]; ok {
+				return true
+			}
+		}
+	}
+
+	// Did not hit any valid testable annotation for flattening
+	return false
 }
 
 func (d *Flattener) isOmitted(deployment *appsv1.Deployment) bool {
@@ -196,20 +262,11 @@ func (d *Flattener) ExpandDeployment(dep appsv1.Deployment) error {
 }
 
 func (d *Flattener) FlattenDaemonSet(ds appsv1.DaemonSet) error {
-	if ds.Spec.Template.Annotations != nil {
-		safe, ok := ds.Spec.Template.Annotations[ClusterAutoScalerSafeEvict]
-		if ok && safe == "true" {
-			return nil
-		}
-	}
-
 	_, err := patcher.PatchDaemonSet(d.client, ds, func(daemonset *appsv1.DaemonSet) error {
-		if daemonset.Spec.Template.Annotations == nil {
-			daemonset.Spec.Template.Annotations = map[string]string{
-				ClusterAutoScalerSafeEvict: "true",
-			}
-		} else {
-			daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict] = "true"
+		updateEvictFlag := d.setSafeEvictDaemonSet(daemonset)
+
+		if !updateEvictFlag {
+			return patcher.NoUpdates
 		}
 
 		return nil
@@ -219,12 +276,13 @@ func (d *Flattener) FlattenDaemonSet(ds appsv1.DaemonSet) error {
 }
 
 func (d *Flattener) ExpandDaemonSet(ds appsv1.DaemonSet) error {
-	if ds.Spec.Template.Annotations == nil {
-		return nil
-	}
-
 	_, err := patcher.PatchDaemonSet(d.client, ds, func(daemonset *appsv1.DaemonSet) error {
-		delete(daemonset.Spec.Template.Annotations, ClusterAutoScalerSafeEvict)
+		updateEvictFlag := d.resetSafeEvictDaemonSet(daemonset)
+
+		if !updateEvictFlag {
+			return patcher.NoUpdates
+		}
+
 		return nil
 	})
 
@@ -508,6 +566,69 @@ func (d *Flattener) resetRollingUpdate(deployment *appsv1.Deployment) bool {
 	}
 
 	deployment.Spec.Strategy.RollingUpdate = rollingUpdate
+
+	return true
+}
+
+// Sets the daemonset pods to a safe-evict state, updates annotation flags
+func (d *Flattener) setSafeEvictDaemonSet(daemonset *appsv1.DaemonSet) bool {
+	var previousValue string
+	if daemonset.Spec.Template.Annotations != nil {
+		previousValue = daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict]
+	}
+
+	// Set the Safe-Evict flag for the pods
+	if daemonset.Spec.Template.Annotations == nil {
+		daemonset.Spec.Template.Annotations = map[string]string{
+			ClusterAutoScalerSafeEvict: "true",
+		}
+	} else {
+		daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict] = "true"
+	}
+
+	// If there wasn't a previous value set, no need to set flag
+	if previousValue == "" {
+		return true
+	}
+
+	if daemonset.Annotations == nil {
+		daemonset.Annotations = map[string]string{
+			KubecostTurnDownSafeEvictFlag: previousValue,
+		}
+	} else {
+		daemonset.Annotations[KubecostTurnDownSafeEvictFlag] = previousValue
+	}
+
+	return true
+}
+
+// Sets the daemonset pods to a safe-evict state, updates annotation flags
+func (d *Flattener) resetSafeEvictDaemonSet(daemonset *appsv1.DaemonSet) bool {
+	if daemonset.Annotations == nil {
+		return false
+	}
+
+	// If there wasn't an entry, remove the pod safe evict flag
+	safeEvictEntry, ok := daemonset.Annotations[KubecostTurnDownSafeEvictFlag]
+	if !ok {
+		if daemonset.Spec.Template.Annotations != nil {
+			delete(daemonset.Spec.Template.Annotations, ClusterAutoScalerSafeEvict)
+		}
+
+		return true
+	}
+
+	// Otherwise, Delete daemonset Annotation
+	delete(daemonset.Annotations, KubecostTurnDownSafeEvictFlag)
+
+	// Reset to the previous value
+	if daemonset.Spec.Template.Annotations == nil {
+		daemonset.Spec.Template.Annotations = map[string]string{
+			ClusterAutoScalerSafeEvict: safeEvictEntry,
+		}
+	} else {
+		daemonset.Spec.Template.Annotations[ClusterAutoScalerSafeEvict] = safeEvictEntry
+	}
 
 	return true
 }

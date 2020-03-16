@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	"k8s.io/klog"
 )

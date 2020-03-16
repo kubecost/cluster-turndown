@@ -8,9 +8,9 @@ import (
 	sync "sync"
 	time "time"
 
-	versioned "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	internalinterfaces "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/internalinterfaces"
-	turndownschedule "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/turndownschedule"
+	versioned "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	internalinterfaces "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/internalinterfaces"
+	turndownschedule "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/turndownschedule"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

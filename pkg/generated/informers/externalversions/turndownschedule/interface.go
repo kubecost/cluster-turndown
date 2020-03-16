@@ -4,8 +4,8 @@
 package turndownschedule
 
 import (
-	internalinterfaces "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
+	internalinterfaces "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
 )
 
 // Interface provides access to each of this group's versions.

@@ -3,7 +3,7 @@
 
 DIR=`pwd`
 PREFIX=github.com
-PACKAGE=${PREFIX}/kubecost/kubecost-turndown
+PACKAGE=${PREFIX}/kubecost/cluster-turndown
 API=turndownschedule
 VERSION=v1alpha1
 

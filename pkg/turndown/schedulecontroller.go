@@ -18,11 +18,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"github.com/kubecost/kubecost-turndown/pkg/apis/turndownschedule/v1alpha1"
-	clientset "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	schedulescheme "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned/scheme"
-	informers "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
-	listers "github.com/kubecost/kubecost-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
+	"github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
+	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	schedulescheme "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned/scheme"
+	informers "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
+	listers "github.com/kubecost/cluster-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
 )
 
 const controllerAgentName = "turndown-schedule-controller"
