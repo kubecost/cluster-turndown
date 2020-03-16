@@ -35,7 +35,7 @@ Note that in order to run `create-service-key.sh` successfully, you will need:
 The easiest way to use this script is to run:
 
 ```bash
-$ ./gke/create-service-key.sh <Project ID> <Service Account Name> <Namespace>
+$ ./scripts/gke-create-service-key.sh <Project ID> <Service Account Name> <Namespace>
 ```
 The parameters to supply the script are as follows:
 * **Project ID**: The GCP project identifier you can find via: `gcloud config get-value project`
