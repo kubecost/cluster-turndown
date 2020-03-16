@@ -25,6 +25,7 @@ There is a helper bash script located at `scripts/gke-create-service-key.sh` whi
 * Create a new Service Account
 * Assign the new Service Account the custom Role
 * Generate a JSON Service Key `service-key.json`
+* Use `kubectl` to create a kubernetes namespace `turndown`
 * Use `kubectl` to create a kubernetes secret containing the service-key in the `turndown` namespace
 
 Note that in order to run `create-service-key.sh` successfully, you will need:
@@ -59,7 +60,19 @@ The process for AWS clusters is mostly the same; however, there is not an automa
 }
 ```
 
+Then run the following to create the turndown namespace:
+
+```bash
+$ cat <<EOF | kubectl apply -f -
+> apiVersion: v1
+> kind: Namespace
+> metadata:
+>   name: turndown
+> EOF
+```
+
 Then run the following to create the secret:
+
 ```bash
 $ kubectl create secret generic cluster-turndown-service-key -n turndown --from-file=service-key.json
 ```
@@ -71,11 +84,9 @@ In order to get the `cluster-turndown` pod running on your cluster, you'll need 
 * `ServiceAccount`
 * `ClusterRole` 
 * `ClusterRoleBinding`
-* `PersistentVolumeClaim`
 * `Deployment`
-* `Service`
 
-and you should applly the yaml like so:
+and you should apply the yaml like so:
 
 ```bash
 $ kubectl apply -f artifacts/cluster-turndown-full.yaml
