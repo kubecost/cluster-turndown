@@ -30,9 +30,9 @@ if [ "$PROJECT_ID" == "" ] || [ "$SERVICE_ACCOUNT_NAME" == "" ]; then
 fi
 
 # Generate a yaml input with desired permissions for running turndown on GKE
-cat <<EOF > kubecost-turndown-role.yaml
-title: "Kubecost Turndown"
-description: "Permissions needed to run kubecost turndown on GKE"
+cat <<EOF > cluster-turndown-role.yaml
+title: "Cluster Turndown"
+description: "Permissions needed to run cluster turndown on GKE"
 stage: "ALPHA"
 includedPermissions:
 - container.clusters.get
@@ -50,12 +50,12 @@ includedPermissions:
 EOF
 
 # Create a new Role using the permissions listened in the yaml and remove permissions yaml
-gcloud iam roles create kubecost.turndown --project $PROJECT_ID --file kubecost-turndown-role.yaml
-rm -f kubecost-turndown-role.yaml
+gcloud iam roles create cluster.turndown --project $PROJECT_ID --file cluster-turndown-role.yaml
+rm -f cluster-turndown-role.yaml
 
 # Create a new service account with the provided inputs and assign the new role
 gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name $SERVICE_ACCOUNT_NAME --format json && \
-    gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/kubecost.turndown && \
+    gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/cluster.turndown && \
     gcloud iam service-accounts keys create $DIR/service-key.json --iam-account $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
 
 if [ "$?" == "1" ]; then 
@@ -68,11 +68,11 @@ fi
 # gcloud container clusters get-credentials $CLUSTER_ID
 
 # Determine if there is already a key 
-kubectl describe secret kubecost-turndown-service-key -n kubecost > /dev/null 2>&1
+kubectl describe secret cluster-turndown-service-key -n kubecost > /dev/null 2>&1
 if [ "$?" == "0" ]; then
-    echo "Located an existing secret 'kubecost-turndown-service-key'. Deleting..."
-    kubectl delete secret kubecost-turndown-service-key -n kubecost 
+    echo "Located an existing secret 'cluster-turndown-service-key'. Deleting..."
+    kubectl delete secret cluster-turndown-service-key -n kubecost 
 fi
 
 # Create the Secret containing the service key
-kubectl create secret generic kubecost-turndown-service-key -n kubecost --from-file=$DIR/service-key.json
+kubectl create secret generic cluster-turndown-service-key -n kubecost --from-file=$DIR/service-key.json
