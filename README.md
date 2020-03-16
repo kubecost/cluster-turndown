@@ -25,7 +25,7 @@ There is a helper bash script located at `scripts/gke-create-service-key.sh` whi
 * Create a new Service Account
 * Assign the new Service Account the custom Role
 * Generate a JSON Service Key `service-key.json`
-* Use `kubectl` to create a kubernetes secret containing the service-key in the provided namespace
+* Use `kubectl` to create a kubernetes secret containing the service-key in the `turndown` namespace
 
 Note that in order to run `create-service-key.sh` successfully, you will need:
 * Google Cloud, `gcloud` installed and authenticated. 
@@ -35,12 +35,11 @@ Note that in order to run `create-service-key.sh` successfully, you will need:
 The easiest way to use this script is to run:
 
 ```bash
-$ ./scripts/gke-create-service-key.sh <Project ID> <Service Account Name> <Namespace>
+$ ./scripts/gke-create-service-key.sh <Project ID> <Service Account Name>
 ```
 The parameters to supply the script are as follows:
 * **Project ID**: The GCP project identifier you can find via: `gcloud config get-value project`
 * **Service Account Name**: The desired service account name to create
-* **Namespace**: The kubernetes namespace to create the secret in.
 
 Note that if you have run this script more than once, the custom permissions role may have already been created. You may see an error similar to the following:
 ```
@@ -62,13 +61,13 @@ The process for AWS clusters is mostly the same; however, there is not an automa
 
 Then run the following to create the secret:
 ```bash
-$ kubectl create secret generic cluster-turndown-service-key -n <install-namespace> --from-file=service-key.json
+$ kubectl create secret generic cluster-turndown-service-key -n turndown --from-file=service-key.json
 ```
 
 ---
 
 #### Enabling the Turndown Deployment
-In order to get the `cluster-turndown` pod running on your cluster, you'll need to `kubectl apply -f `artifacts/cluster-turndown-full.yaml` **after** making a single adjustment (see below). In this yaml, you'll find the definitions for the following:
+In order to get the `cluster-turndown` pod running on your cluster, you'll need to `kubectl apply -f `artifacts/cluster-turndown-full.yaml`. In this yaml, you'll find the definitions for the following:
 * `ServiceAccount`
 * `ClusterRole` 
 * `ClusterRoleBinding`
@@ -76,36 +75,17 @@ In order to get the `cluster-turndown` pod running on your cluster, you'll need 
 * `Deployment`
 * `Service`
 
-In order for the yaml to apply correctly, you'll need to update the `ClusterRoleBinding.subject.namespace` to match your install namespace. This value appears as `$$YOUR_NAMESPACE_HERE$$` temporarily, so it should be easy to locate. For example, if you plan on using `mynamespace` as your namespace name, then modify the `ClusterRoleBinding` in `artifacts/cluster-turndown-full.yaml` replacing `$$YOUR_NAMESPACE_HERE$$` with `mynamespace`. 
-
-```yaml
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cluster-turndown
-  labels:
-    app: cluster-turndown
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cluster-turndown
-subjects:
-  - kind: ServiceAccount
-    name: cluster-turndown
-    namespace: mynamespace
-```
-
 and you should applly the yaml like so:
 
 ```bash
-$ kubectl apply -f artifacts/cluster-turndown-full.yaml -n mynamespace
+$ kubectl apply -f artifacts/cluster-turndown-full.yaml
 ```
 
 #### Verify the Pod is Running
 You can verify that the pod is running by issuing the following:
 
 ```bash
-$ kubectl get pods -l app=cluster-turndown -n <install-namespace>
+$ kubectl get pods -l app=cluster-turndown -n turndown
 ```
 
 ---
