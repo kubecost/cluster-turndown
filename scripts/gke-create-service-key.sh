@@ -3,19 +3,23 @@
 
 PROJECT_ID=$1
 SERVICE_ACCOUNT_NAME=$2
+NAMESPACE=$3
 DIR=`pwd`
 
 usage() {
     echo "$1"
     echo ""
     echo "Usage: "
-    echo "./create-service-key.sh <Project ID> <Service Account Name>"
+    echo "./gke-create-service-key.sh <Project ID> <Service Account Name> <Namespace>"
     echo ""
     echo "   Project ID: "
     echo "   The GCP project identifier you can find via: 'gcloud config get-value project'"
     echo ""
     echo "   Service Account Name: "
     echo "   The desired service account name to create"
+    echo ""
+    echo "   Namespace: "
+    echo "   The kubernetes namespace to create the secret in."
     echo ""
 }
 
@@ -27,6 +31,10 @@ fi
 if [ "$PROJECT_ID" == "" ] || [ "$SERVICE_ACCOUNT_NAME" == "" ]; then
     usage "Invalid Parameters"
     exit 1
+fi
+
+if [ "$NAMESPACE" == "" ]; then
+    echo "NOTE: Namespace parameter was empty, this will create the secret in the default namespace"
 fi
 
 # Generate a yaml input with desired permissions for running turndown on GKE
@@ -67,12 +75,17 @@ fi
 # we'll just note that kubectl should be set to the correct context beforehand
 # gcloud container clusters get-credentials $CLUSTER_ID
 
+NSCOMM=""
+if [ "$NAMESPACE" != "" ]; then
+    NSCOMM="-n $NAMESPACE"
+fi
+
 # Determine if there is already a key 
-kubectl describe secret cluster-turndown-service-key -n kubecost > /dev/null 2>&1
+kubectl describe secret cluster-turndown-service-key $NSCOMM > /dev/null 2>&1
 if [ "$?" == "0" ]; then
     echo "Located an existing secret 'cluster-turndown-service-key'. Deleting..."
-    kubectl delete secret cluster-turndown-service-key -n kubecost 
+    kubectl delete secret cluster-turndown-service-key $NSCOMM 
 fi
 
 # Create the Secret containing the service key
-kubectl create secret generic cluster-turndown-service-key -n kubecost --from-file=$DIR/service-key.json
+kubectl create secret generic cluster-turndown-service-key $NSCOMM --from-file=$DIR/service-key.json

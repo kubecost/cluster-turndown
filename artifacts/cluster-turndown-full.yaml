@@ -154,7 +154,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: cluster-turndown
-    namespace: kubecost
+    namespace: $$YOUR_NAMESPACE_HERE$$
 ---
 apiVersion: apps/v1
 kind: Deployment
