@@ -25,7 +25,7 @@ There is a helper bash script located at `scripts/gke-create-service-key.sh` whi
 * Create a new Service Account
 * Assign the new Service Account the custom Role
 * Generate a JSON Service Key `service-key.json`
-* Use `kubectl` to create a kubernetes secret containing the service-key in the `kubecost` namespace
+* Use `kubectl` to create a kubernetes secret containing the service-key in the provided namespace
 
 Note that in order to run `create-service-key.sh` successfully, you will need:
 * Google Cloud, `gcloud` installed and authenticated. 
