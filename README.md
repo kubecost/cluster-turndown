@@ -6,33 +6,15 @@ Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's
 ### GKE Setup
 
 #### Service Account
-In order to setup the scheduled turndown, you'll need to use a service account key with the following permissions:
-- container.clusters.get
-- container.clusters.update
-- compute.instances.list
-- iam.serviceAccounts.actAs
-- container.nodes.create
-- container.nodes.delete
-- container.nodes.get
-- container.nodes.getStatus
-- container.nodes.list
-- container.nodes.proxy
-- container.nodes.update
-- container.nodes.updateStatus
+We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details on helper scripts can be located in the [Scripts](scripts/README.md) sub-directory. 
 
-There is a helper bash script located at `scripts/gke-create-service-key.sh` which will:
-* Create a new Role with the permissions above
-* Create a new Service Account
-* Assign the new Service Account the custom Role
-* Generate a JSON Service Key `service-key.json`
-* Use `kubectl` to create a kubernetes namespace `turndown`
-* Use `kubectl` to create a kubernetes secret containing the service-key in the `turndown` namespace
-
+##### Prerequisites
 Note that in order to run `gke-create-service-key.sh` successfully, you will need:
 * Google Cloud, `gcloud` installed and authenticated. 
 * `kubectl` installed  with target cluster in kubeconfig
     * `kubectl config current-context` should point to the target cluster before running the script.
-
+    
+##### Running the Script
 The easiest way to use this script is to run:
 
 ```bash
@@ -64,12 +46,7 @@ Create a new User with **AutoScalingFullAccess** permissions. Create a new file,
 Then run the following to create the turndown namespace:
 
 ```bash
-$ cat <<EOF | kubectl apply -f -
-> apiVersion: v1
-> kind: Namespace
-> metadata:
->   name: turndown
-> EOF
+$ kubectl apply -f artifacts/turndown-namespace.yaml
 ```
 
 Then run the following to create the secret:
