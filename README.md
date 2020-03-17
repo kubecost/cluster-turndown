@@ -52,7 +52,8 @@ This error is harmless, as the script should continue.
 
 ### AWS (Kops) Setup
 
-The process for AWS clusters is mostly the same; however, there is not an automated script which creates the secret for you. Instead, you will want to create a new file `service-key.json` and use this template to fill in the proper values:
+Create a new User with **AutoScalingFullAccess** permissions. Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
+
 ```json
 {
     "aws_access_key_id": "<ACCESS_KEY_ID>",
