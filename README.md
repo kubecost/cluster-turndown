@@ -5,8 +5,7 @@ Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's
 
 ### GKE Setup
 
-#### Service Account
-We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details on helper scripts can be located in the [Scripts](scripts/README.md) sub-directory. 
+We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details on helper scripts can be located in the [scripts](scripts/README.md) sub-directory. 
 
 ##### Prerequisites
 Note that in order to run `gke-create-service-key.sh` successfully, you will need:
@@ -14,8 +13,8 @@ Note that in order to run `gke-create-service-key.sh` successfully, you will nee
 * `kubectl` installed  with target cluster in kubeconfig
     * `kubectl config current-context` should point to the target cluster before running the script.
     
-##### Running the Script
-The easiest way to use this script is to run:
+##### Running the Setup Script
+To use [this setup script](scripts/gke-create-service-key.sh) supply the following parameters:
 
 ```bash
 $ ./scripts/gke-create-service-key.sh <Project ID> <Service Account Name>
@@ -57,18 +56,19 @@ $ kubectl create secret generic cluster-turndown-service-key -n turndown --from-
 
 ---
 
-#### Enabling the Turndown Deployment
-In order to get the `cluster-turndown` pod running on your cluster, you'll need to `kubectl apply -f artifacts/cluster-turndown-full.yaml`. In this yaml, you'll find the definitions for the following:
-* `ServiceAccount`
-* `ClusterRole` 
-* `ClusterRoleBinding`
-* `Deployment`
-
-and you should apply the yaml like so:
+### Enabling the Turndown Deployment
+After completing setup, run the following command to get the `cluster-turndown` pod running on your cluster:
 
 ```bash
 $ kubectl apply -f artifacts/cluster-turndown-full.yaml
 ```
+
+In this yaml, you'll find the definitions for the following:
+
+* `ServiceAccount`
+* `ClusterRole` 
+* `ClusterRoleBinding`
+* `Deployment`
 
 #### Verify the Pod is Running
 You can verify that the pod is running by issuing the following:
@@ -78,7 +78,7 @@ $ kubectl get pods -l app=cluster-turndown -n turndown
 ```
 
 ---
-### Setting a Turndown Schedule
+## Setting a Turndown Schedule
 Cluster Turndown uses a Kubernetes Custom Resource Definition to create schedules. There is an example resource located at `artifacts/example-schedule.yaml`:
 
 ```yaml
@@ -105,7 +105,7 @@ To create this schedule, you may modify `example-schedule.yaml` to your desired 
 $ kubectl apply -f artifacts/example-schedule.yaml
 ```
 
-### Viewing a Turndown Schedule
+## Viewing a Turndown Schedule
 The `turndownschedule` resource can be listed via `kubectl` as well:
 
 ```bash
@@ -172,7 +172,7 @@ The `Status` field displays the current status of the schedule including next sc
 * **ScaleDownMetadata**: Metadata attached to the scaledown job, assigned by the turndown scheduler.
 * **ScaleUpMetadata**: Metadata attached to the scale up job, assigned by the turndown scheduler.
 
-### Cancelling a Schedule During Turndown
+## Cancelling a Schedule During Turndown
 A turndown can be cancelled before turndown actually happens or after. This is performed by deleting the resource:
 
 ```bash
@@ -183,11 +183,11 @@ Note that cancelling while turndown is in the act of scaling down or up will res
 
 Additionally, if the turndown schedule is cancelled between a turndown and turn up, the turn up will occur automatically upon cancel. 
 
-#### Limitations
+### Limitations
 * The internal scheduler only allows one schedule at a time to be used. Any additional schedule resources created will fail (`kubectl get tds -o yaml` will display the status).
-* **DO NOT** attempt to `kubectl edit` a turndown schedule. This is currently not supported.
+* **DO NOT** attempt to `kubectl edit` a turndown schedule. This is currently not supported. Recommended approach for modifying is to delete and then create a new schedule.
 
-### Turndown Strategies
+## Turndown Strategies
 
 #### GKE Masterless Strategy
 When the turndown schedule occurs, a new node pool with a single g1-small node is created. Taints are added to this node to only allow specific pods to be scheduled there. We update our cluster-turndown deployment such that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and resume scaledown. This is done by cordoning all nodes in the cluster (other than our new g1-small node), and then reducing the node pool sizes to 0.
@@ -199,5 +199,5 @@ Whenever there exists at least one NodePool with the cluster-autoscaler enabled,
 * **kubecost.kubernetes.io/turn-down-rollout**: Stores the previous maxUnavailable for the deployment rollout. 
 * **kubecost.kubernetes.io/safe-evict**: For autoscaling clusters, we use the `cluster-autoscaler.kubernetes.io/safe-to-evict` to have the autoscaler do the work for us. We want to make sure we preserve any deployments that previously had this annotation set, so when we scale back up, we don’t reset this value unintentionally. 
 
-#### AWS Standard Strategy
+#### AWS kops Strategy
 This turndown strategy schedules the turndown pod on the Master node, then resizes all Auto Scaling Groups other than the master to 0. Similar to flattening in GKE, the previous min/max/current values of the ASG prior to turndown will be set on the tag. When turn up occurs, those values can be read from the tags and restored to their original sizes. For the standard strategy, turn up will reschedule the turndown pod off the Master upon completion (occurs 5 minutes after turn up). This is to allow any modifications via kops without resetting any cluster specific scheduling setup by turndown. The **tag** label used to store the min/max/current values for a node group is `cluster.turndown.previous`. Once turn up happens and the node groups are resized to their original size, the tag is deleted.
