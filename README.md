@@ -127,7 +127,8 @@ To create this schedule, you may modify `example-schedule.yaml` to your desired 
 $ kubectl apply -f artifacts/example-schedule.yaml
 ```
 
-**_NOTE_**: The `turndownschedule` resource can be listed via `kubectl` as well:
+### Viewing a Turndown Schedule
+The `turndownschedule` resource can be listed via `kubectl` as well:
 
 ```bash
 $ kubectl get turndownschedules
@@ -139,6 +140,59 @@ or using the shorthand:
 $ kubectl get tds
 ```
 
+Details regarding the status of the turndown schedule can be found by outputting as json or yaml:
+
+```bash
+$ kubectl get tds example-schedule -o yaml
+
+apiVersion: kubecost.k8s.io/v1alpha1
+kind: TurndownSchedule
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"kubecost.k8s.io/v1alpha1","kind":"TurndownSchedule","metadata":{"annotations":{},"finalizers":["finalizer.kubecost.k8s.io"],"name":"example-schedule"},"spec":{"end":"2020-03-17T00:35:00Z","repeat":"daily","start":"2020-03-17T00:20:00Z"}}
+  creationTimestamp: "2020-03-17T00:18:39Z"
+  finalizers:
+  - finalizer.kubecost.k8s.io
+  generation: 1
+  name: example-schedule
+  resourceVersion: "33573"
+  selfLink: /apis/kubecost.k8s.io/v1alpha1/turndownschedules/example-schedule
+  uid: d9b16aed-67e4-11ea-b591-42010a8e0075
+spec:
+  end: "2020-03-17T00:35:00Z"
+  repeat: daily
+  start: "2020-03-17T00:20:00Z"
+status:
+  current: scaledown
+  lastUpdated: "2020-03-17T00:36:39Z"
+  nextScaleDownTime: "2020-03-18T00:21:38Z"
+  nextScaleUpTime: "2020-03-18T00:36:38Z"
+  scaleDownId: 38ebf595-4e2b-46e9-951a-1e3ceff30536
+  scaleDownMetadata:
+    repeat: daily
+    type: scaledown
+  scaleUpID: 869ec89f-a8d8-450b-9ebb-71cd4d7fbaf8
+  scaleUpMetadata:
+    repeat: daily
+    type: scaleup
+  state: ScheduleSuccess
+```
+
+The `Status` field displays the current status of the schedule including next schedule times, specific schedule identifiers, and the overall state of schedule.
+
+* **State**: The state of the turndown schedule. This can be:
+  * **ScheduleSuccess**: The schedule has been set and is waiting to run. 
+  * **ScheduleFailed**: The scheduling failed due to a schedule already existing, scheduling for a date-time in the past.
+  * **ScheduleCompleted**: For schedules with `repeat: none`, the schedule will move to a completed state after turn up. 
+* **Current**: The next action to run.
+* **LastUpdated**: The last time the status was updated on the schedule.
+* **NextScaleDownTime**: The next time a turndown will be executed.
+* **NextScaleUpTime**: The next time at turn up will be executed.
+* **ScaleDownId**: Specific identifier assigned by the internal scheduler for turndown.
+* **ScaleUpId**: Specific identifier assigned by the internal scheduler for turn up.
+* **ScaleDownMetadata**: Metadata attached to the scaledown job, assigned by the turndown scheduler.
+* **ScaleUpMetadata**: Metadata attached to the scale up job, assigned by the turndown scheduler.
 
 ### Cancelling a Schedule During Turndown
 A turndown can be cancelled before turndown actually happens or after. This is performed by deleting the resource:
