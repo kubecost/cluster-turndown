@@ -25,7 +25,7 @@ const (
 	LabelGKENodePool      = "cloud.google.com/gke-nodepool"
 	GKECredsEnvVar        = "GOOGLE_APPLICATION_CREDENTIALS"
 	GKEAuthServiceAccount = "/var/keys/service-key.json"
-	GKETurndownPoolName   = "kubecost-turndown"
+	GKETurndownPoolName   = "cluster-turndown"
 )
 
 var (

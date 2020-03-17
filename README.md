@@ -28,7 +28,7 @@ There is a helper bash script located at `scripts/gke-create-service-key.sh` whi
 * Use `kubectl` to create a kubernetes namespace `turndown`
 * Use `kubectl` to create a kubernetes secret containing the service-key in the `turndown` namespace
 
-Note that in order to run `create-service-key.sh` successfully, you will need:
+Note that in order to run `gke-create-service-key.sh` successfully, you will need:
 * Google Cloud, `gcloud` installed and authenticated. 
 * `kubectl` installed  with target cluster in kubeconfig
     * `kubectl config current-context` should point to the target cluster before running the script.
@@ -158,7 +158,7 @@ Additionally, if the turndown schedule is cancelled between a turndown and turn 
 ### Turndown Strategies
 
 #### GKE Masterless Strategy
-When the turndown schedule occurs, a new node pool with a single g1-small node is created. Taints are added to this node to only allow specific pods to be scheduled there. We update our kubecost-turndown deployment such that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and resume scaledown. This is done by cordoning all nodes in the cluster (other than our new g1-small node), and then reducing the node pool sizes to 0.
+When the turndown schedule occurs, a new node pool with a single g1-small node is created. Taints are added to this node to only allow specific pods to be scheduled there. We update our cluster-turndown deployment such that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and resume scaledown. This is done by cordoning all nodes in the cluster (other than our new g1-small node), and then reducing the node pool sizes to 0.
 
 #### GKE Autoscaler Strategy
 Whenever there exists at least one NodePool with the cluster-autoscaler enabled, the turndown will resize all non-autoscaling nodepools to 0, and schedule the turndown pod on one of the autoscaler nodepool nodes. Once it is brought back up, it will start a process called "flattening" which attempts to set deployment replicas to 0, turn off jobs, and annotate pods with labels that allow the autoscaler to do the rest of the work. Flattening persists pre-turndown values in the annotations of Kubernetes objects. When turn up occurs, deployments and daemonsets are "expanded" to their original sizes/replicas. There are four annotations that can be applied for this process:
@@ -168,4 +168,4 @@ Whenever there exists at least one NodePool with the cluster-autoscaler enabled,
 * **kubecost.kubernetes.io/safe-evict**: For autoscaling clusters, we use the `cluster-autoscaler.kubernetes.io/safe-to-evict` to have the autoscaler do the work for us. We want to make sure we preserve any deployments that previously had this annotation set, so when we scale back up, we don’t reset this value unintentionally. 
 
 #### AWS Standard Strategy
-This turndown strategy schedules the turndown pod on the Master node, then resizes all Auto Scaling Groups other than the master to 0. Similar to flattening in GKE, the previous min/max/current values of the ASG prior to turndown will be set on the tag. When turn up occurs, those values can be read from the tags and restored to their original sizes. For the standard strategy, turn up will reschedule the turndown pod off the Master upon completion (occurs 5 minutes after turn up). This is to allow any modifications via kops without resetting any cluster specific scheduling setup by turndown. The **tag** label used to store the min/max/current values for a node group is `kubecost.turndown.previous`. Once turn up happens and the node groups are resized to their original size, the tag is deleted.
+This turndown strategy schedules the turndown pod on the Master node, then resizes all Auto Scaling Groups other than the master to 0. Similar to flattening in GKE, the previous min/max/current values of the ASG prior to turndown will be set on the tag. When turn up occurs, those values can be read from the tags and restored to their original sizes. For the standard strategy, turn up will reschedule the turndown pod off the Master upon completion (occurs 5 minutes after turn up). This is to allow any modifications via kops without resetting any cluster specific scheduling setup by turndown. The **tag** label used to store the min/max/current values for a node group is `cluster.turndown.previous`. Once turn up happens and the node groups are resized to their original size, the tag is deleted.

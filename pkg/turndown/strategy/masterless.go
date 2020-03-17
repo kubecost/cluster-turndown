@@ -81,7 +81,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 
 		// Lookup the turndown node in the kubernetes API
 		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: "kubecost-turndown-node=true",
+			LabelSelector: "cluster-turndown-node=true",
 		})
 		if err != nil {
 			return nil, err
@@ -108,7 +108,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		}
 
 		// Patch and get the updated node
-		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "kubecost-turndown-node", "true")
+		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "cluster-turndown-node", "true")
 		if err != nil {
 			return nil, err
 		}

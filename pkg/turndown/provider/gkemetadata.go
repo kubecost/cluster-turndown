@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	KubecostTurndownUserAgent = "kubecost-turndown"
+	KubecostTurndownUserAgent = "cluster-turndown"
 	GKEMetaDataProjectIDKey   = "projectid"
 	GKEMetaDataZoneKey        = "zone"
 	GKEMetaDataClusterNameKey = "cluster-name"

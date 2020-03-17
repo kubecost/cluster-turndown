@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	KubecostFlattenerOmit = []string{"kubecost-turndown", "kube-dns", "kube-dns-autoscaler"}
+	KubecostFlattenerOmit = []string{"cluster-turndown", "kube-dns", "kube-dns-autoscaler"}
 )
 
 // TurndownManager is an implementation prototype for an object capable of managing
@@ -73,7 +73,7 @@ func (ktdm *KubernetesTurndownManager) IsScaledDown() bool {
 
 func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
 	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector: "kubecost-turndown-node=true",
+		LabelSelector: "cluster-turndown-node=true",
 	})
 	if err != nil {
 		return false, err
@@ -114,7 +114,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	ktdm.log.Log("Applying Tolerations and Node Selector to turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("cluster-turndown", metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 			Operator: v1.TolerationOpExists,
 		})
 		d.Spec.Template.Spec.NodeSelector = map[string]string{
-			"kubecost-turndown-node": "true",
+			"cluster-turndown-node": "true",
 		}
 		return nil
 	})
@@ -336,7 +336,7 @@ func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
 	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("cluster-turndown", metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

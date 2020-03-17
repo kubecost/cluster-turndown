@@ -29,7 +29,7 @@ const (
 	AWSGroupNameTagKey            = "aws:autoscaling:groupName"
 	AWSRoleMasterTagKey           = "k8s.io/role/master"
 	AWSRoleNodeTagKey             = "k8s.io/role/node"
-	AWSNodeGroupPreviousKey       = "kubecost.turndown.previous"
+	AWSNodeGroupPreviousKey       = "cluster.turndown.previous"
 	AutoScalingGroupResourceType  = "auto-scaling-group"
 	placeholderInstanceNamePrefix = "i-placeholder"
 )
@@ -82,7 +82,7 @@ func (p *AWSProvider) IsServiceAccountKey() bool {
 
 func (p *AWSProvider) IsTurndownNodePool() bool {
 	res, err := p.clusterManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String("kubecost-turndown")},
+		AutoScalingGroupNames: []*string{aws.String("cluster-turndown")},
 	})
 	if err != nil {
 		return false

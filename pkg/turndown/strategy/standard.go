@@ -69,7 +69,7 @@ func (ktdm *StandardTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) {
 	masterNode := &nodeList.Items[0]
 
 	// Patch and get the updated node
-	return patcher.UpdateNodeLabel(ktdm.client, *masterNode, "kubecost-turndown-node", "true")
+	return patcher.UpdateNodeLabel(ktdm.client, *masterNode, "cluster-turndown-node", "true")
 }
 
 func (sts *StandardTurndownStrategy) UpdateDNS() error {
@@ -133,7 +133,7 @@ func (sts *StandardTurndownStrategy) ReverseHostNode() error {
 	masterNode := &nodeList.Items[0]
 
 	// Patch and get the updated node
-	_, err = patcher.DeleteNodeLabel(sts.client, *masterNode, "kubecost-turndown-node")
+	_, err = patcher.DeleteNodeLabel(sts.client, *masterNode, "cluster-turndown-node")
 
 	dns, err := sts.client.AppsV1().Deployments("kube-system").Get("kube-dns", metav1.GetOptions{})
 	if err != nil {
