@@ -80,7 +80,7 @@ $ kubectl create secret generic cluster-turndown-service-key -n turndown --from-
 ---
 
 #### Enabling the Turndown Deployment
-In order to get the `cluster-turndown` pod running on your cluster, you'll need to `kubectl apply -f `artifacts/cluster-turndown-full.yaml`. In this yaml, you'll find the definitions for the following:
+In order to get the `cluster-turndown` pod running on your cluster, you'll need to `kubectl apply -f artifacts/cluster-turndown-full.yaml`. In this yaml, you'll find the definitions for the following:
 * `ServiceAccount`
 * `ClusterRole` 
 * `ClusterRoleBinding`
