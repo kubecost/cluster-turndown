@@ -90,7 +90,7 @@ func NewTurndownScheduleResourceController(
 
 	klog.V(4).Info("Setting up event handlers")
 
-	// Set up an event handler for when Foo resources change
+	// Set up an event handler for when TurndownSchedule resources change
 	schedulesInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    controller.addSchedule,
 		UpdateFunc: controller.updateSchedule,
@@ -113,7 +113,6 @@ func (c *TurndownScheduleResourceController) Run(threadiness int, stopCh <-chan 
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
-	// Launch two workers to process Foo resources
 	for i := 0; i < threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
