@@ -4,7 +4,7 @@
 package v1alpha1
 
 import (
-	internalinterfaces "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/internalinterfaces"
+	internalinterfaces "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to all the informers in this group version.

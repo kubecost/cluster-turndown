@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	TurndownNodeLabel = "kubecost-turndown-node"
+	TurndownNodeLabel = "cluster-turndown-node"
 )
 
 type UserAgentTransport struct {

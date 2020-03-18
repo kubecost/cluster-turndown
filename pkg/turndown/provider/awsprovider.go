@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kubecost/kubecost-turndown/pkg/file"
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/file"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +29,7 @@ const (
 	AWSGroupNameTagKey            = "aws:autoscaling:groupName"
 	AWSRoleMasterTagKey           = "k8s.io/role/master"
 	AWSRoleNodeTagKey             = "k8s.io/role/node"
-	AWSNodeGroupPreviousKey       = "kubecost.turndown.previous"
+	AWSNodeGroupPreviousKey       = "cluster.turndown.previous"
 	AutoScalingGroupResourceType  = "auto-scaling-group"
 	placeholderInstanceNamePrefix = "i-placeholder"
 )
@@ -82,7 +82,7 @@ func (p *AWSProvider) IsServiceAccountKey() bool {
 
 func (p *AWSProvider) IsTurndownNodePool() bool {
 	res, err := p.clusterManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
-		AutoScalingGroupNames: []*string{aws.String("kubecost-turndown")},
+		AutoScalingGroupNames: []*string{aws.String("cluster-turndown")},
 	})
 	if err != nil {
 		return false
@@ -134,6 +134,10 @@ func (p *AWSProvider) GetNodePools() ([]NodePool, error) {
 }
 
 func (p *AWSProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	sz := int64(size)
 
 	for _, np := range nodePools {
@@ -179,6 +183,10 @@ func (p *AWSProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 }
 
 func (p *AWSProvider) ResetNodePoolSizes(nodePools []NodePool) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	for _, np := range nodePools {
 		tags := np.Tags()
 		rangeTag, ok := tags[AWSNodeGroupPreviousKey]

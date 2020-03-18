@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/async"
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -19,13 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-)
-
-const (
-	ClusterAutoScalerSafeEvict    = "cluster-autoscaler.kubernetes.io/safe-to-evict"
-	KubecostTurnDownReplicas      = "kubecost.kubernetes.io/turn-down-replicas"
-	KubecostTurnDownRollout       = "kubecost.kubernetes.io/turn-down-rollout"
-	KubecostTurnDownSafeEvictFlag = "kubecost.kubernetes.io/safe-evict"
 )
 
 // Draininator is the type used to drain a specific kubernetes node. Much like

@@ -6,10 +6,10 @@ package v1alpha1
 import (
 	time "time"
 
-	turndownschedulev1alpha1 "github.com/kubecost/kubecost-turndown/pkg/apis/turndownschedule/v1alpha1"
-	versioned "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	internalinterfaces "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/kubecost/kubecost-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
+	turndownschedulev1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
+	versioned "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	internalinterfaces "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/internalinterfaces"
+	v1alpha1 "github.com/kubecost/cluster-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"

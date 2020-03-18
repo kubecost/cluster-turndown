@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/apis/turndownschedule/v1alpha1"
-	clientset "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
+	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
 
@@ -31,18 +32,26 @@ type ScheduleTurndownRequest struct {
 }
 
 type TurndownEndpoints struct {
-	client    clientset.Interface
-	scheduler *TurndownScheduler
-	turndown  TurndownManager
-	provider  provider.ComputeProvider
+	kubeClient kubernetes.Interface
+	client     clientset.Interface
+	scheduler  *TurndownScheduler
+	turndown   TurndownManager
+	provider   provider.ComputeProvider
 }
 
-func NewTurndownEndpoints(client clientset.Interface, scheduler *TurndownScheduler, turndown TurndownManager, provider provider.ComputeProvider) *TurndownEndpoints {
+func NewTurndownEndpoints(
+	kubeClient kubernetes.Interface,
+	client clientset.Interface,
+	scheduler *TurndownScheduler,
+	turndown TurndownManager,
+	provider provider.ComputeProvider) *TurndownEndpoints {
+
 	return &TurndownEndpoints{
-		client:    client,
-		scheduler: scheduler,
-		turndown:  turndown,
-		provider:  provider,
+		kubeClient: kubeClient,
+		client:     client,
+		scheduler:  scheduler,
+		turndown:   turndown,
+		provider:   provider,
 	}
 }
 

@@ -1,7 +1,7 @@
-VERSION=v4.1-SNAPSHOT
+VERSION=v1.0
 REGISTRY=gcr.io
 PROJECT_ID=kubecost1
-APPNAME=kubecost-turndown
+APPNAME=cluster-turndown
 
 release: clean build push clean
 

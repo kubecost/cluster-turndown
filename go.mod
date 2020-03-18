@@ -1,4 +1,4 @@
-module github.com/kubecost/kubecost-turndown
+module github.com/kubecost/cluster-turndown
 
 go 1.13
 

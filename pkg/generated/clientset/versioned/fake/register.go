@@ -4,7 +4,7 @@
 package fake
 
 import (
-	kubecostv1alpha1 "github.com/kubecost/kubecost-turndown/pkg/apis/turndownschedule/v1alpha1"
+	kubecostv1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

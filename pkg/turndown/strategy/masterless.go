@@ -3,9 +3,9 @@ package strategy
 import (
 	"fmt"
 
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/patcher"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,7 +81,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 
 		// Lookup the turndown node in the kubernetes API
 		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: "kubecost-turndown-node=true",
+			LabelSelector: "cluster-turndown-node=true",
 		})
 		if err != nil {
 			return nil, err
@@ -108,7 +108,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		}
 
 		// Patch and get the updated node
-		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "kubecost-turndown-node", "true")
+		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "cluster-turndown-node", "true")
 		if err != nil {
 			return nil, err
 		}

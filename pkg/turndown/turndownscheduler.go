@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	"k8s.io/klog"
 )
@@ -164,6 +164,11 @@ func validateSchedule(from time.Time, to time.Time, repeatType *string) error {
 	delta := to.Sub(from)
 	if delta < 0 {
 		return fmt.Errorf("The end time (%s) was set to a time before the start parameter (%s).", to, from)
+	}
+
+	// Set minimum start/end delta to 20 minutes -- somewhat arbitrary, but avoid collisions between scaleup and scaledown
+	if delta < (time.Minute * 20) {
+		return fmt.Errorf("The start time (%s) and end time (%s) must be at least 20 mins apart.", from, to)
 	}
 
 	// Check To relative to Now

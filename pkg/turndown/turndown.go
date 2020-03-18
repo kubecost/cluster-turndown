@@ -1,13 +1,12 @@
 package turndown
 
 import (
-	"fmt"
 	"os"
 
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/patcher"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/provider"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/strategy"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -18,7 +17,7 @@ import (
 )
 
 var (
-	KubecostFlattenerOmit = []string{"kubecost-turndown", "kube-dns", "kube-dns-autoscaler"}
+	KubecostFlattenerOmit = []string{"kube-dns", "kube-dns-autoscaler"}
 )
 
 // TurndownManager is an implementation prototype for an object capable of managing
@@ -74,7 +73,7 @@ func (ktdm *KubernetesTurndownManager) IsScaledDown() bool {
 
 func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
 	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector: "kubecost-turndown-node=true",
+		LabelSelector: "cluster-turndown-node=true",
 	})
 	if err != nil {
 		return false, err
@@ -106,16 +105,22 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return err
 	}
 
-	// Locate turndown namespace -- default to kubecost
+	// Locate turndown namespace -- default to turndown
 	ns := os.Getenv("TURNDOWN_NAMESPACE")
 	if ns == "" {
-		ns = "kubecost"
+		ns = "turndown"
+	}
+
+	// Locate deployment name -- default to cluster-turndown
+	deploymentName := os.Getenv("TURNDOWN_DEPLOYMENT")
+	if deploymentName == "" {
+		deploymentName = "cluster-turndown"
 	}
 
 	ktdm.log.Log("Applying Tolerations and Node Selector to turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -129,7 +134,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 			Operator: v1.TolerationOpExists,
 		})
 		d.Spec.Template.Spec.NodeSelector = map[string]string{
-			"kubecost-turndown-node": "true",
+			"cluster-turndown-node": "true",
 		}
 		return nil
 	})
@@ -268,23 +273,26 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 		ktdm.log.Log("NodeGroups Require Loading. Loading now...")
 
 		if err := ktdm.loadNodePools(); err != nil {
-			ktdm.log.Err("Failed to load NodeGroups")
-			return err
-		}
+			ktdm.log.Err("Failed to load NodeGroups: %s", err.Error())
 
-		// Check Again
-		if len(ktdm.nodePools) == 0 {
-			ktdm.log.Err("Failed to load NodeGroups")
-			return fmt.Errorf("Failed to locate any node pools to scale up.")
+			// Check for autoscaling expansion
+			flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+
+			isAutoscaling := flattener.IsClusterFlattened()
+			ktdm.autoScaling = &isAutoscaling
 		}
 	}
 
-	ktdm.log.Log("Resetting all NodeGroup sizes to pre-turndown capacity...")
+	// At this point, if our nodepool count is 0, it just means we have only
+	// autoscaling node pools. Only reset node pool counts if we have non-autoscaling pools.
+	if len(ktdm.nodePools) > 0 {
+		ktdm.log.Log("Resetting all NodeGroup sizes to pre-turndown capacity...")
 
-	// 2. Set NodePool sizes back to what they were previously
-	err := ktdm.provider.ResetNodePoolSizes(ktdm.nodePools)
-	if err != nil {
-		return err
+		// 2. Set NodePool sizes back to what they were previously
+		err := ktdm.provider.ResetNodePoolSizes(ktdm.nodePools)
+		if err != nil {
+			return err
+		}
 	}
 
 	// 3. Expand Autoscaling Nodes or Resume Jobs
@@ -325,16 +333,22 @@ func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
 		return err
 	}
 
-	// Locate turndown namespace -- default to kubecost
+	// Locate turndown namespace -- default to turndown
 	ns := os.Getenv("TURNDOWN_NAMESPACE")
 	if ns == "" {
-		ns = "kubecost"
+		ns = "turndown"
+	}
+
+	// Locate deployment name -- default to cluster-turndown
+	deploymentName := os.Getenv("TURNDOWN_DEPLOYMENT")
+	if deploymentName == "" {
+		deploymentName = "cluster-turndown"
 	}
 
 	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("kubecost-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

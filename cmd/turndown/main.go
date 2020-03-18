@@ -12,22 +12,22 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	clientset "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	informers "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions"
+	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	informers "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions"
 
-	"github.com/kubecost/kubecost-turndown/pkg/signals"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/provider"
-	"github.com/kubecost/kubecost-turndown/pkg/turndown/strategy"
+	"github.com/kubecost/cluster-turndown/pkg/signals"
+	"github.com/kubecost/cluster-turndown/pkg/turndown"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
 
 	"k8s.io/klog"
 )
 
 // Run web server with turndown endpoints
-func runWebServer(client clientset.Interface, scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager, provider provider.ComputeProvider) {
+func runWebServer(kubeClient kubernetes.Interface, client clientset.Interface, scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager, provider provider.ComputeProvider) {
 	mux := http.NewServeMux()
 
-	endpoints := turndown.NewTurndownEndpoints(client, scheduler, manager, provider)
+	endpoints := turndown.NewTurndownEndpoints(kubeClient, client, scheduler, manager, provider)
 
 	mux.HandleFunc("/schedule", endpoints.HandleStartSchedule)
 	mux.HandleFunc("/cancel", endpoints.HandleCancelSchedule)
@@ -122,26 +122,33 @@ func main() {
 	//scheduleStore := turndown.NewDiskScheduleStore("/var/configs/schedule.json")
 
 	// Platform Provider for Turndown API
-	provider, err := provider.NewProvider(kubeClient)
+	computeProvider, err := provider.NewProvider(kubeClient)
 	if err != nil {
-		klog.V(1).Infof("Failed to determine provider: %s", err.Error())
+		klog.V(1).Infof("[Error]: Failed to determine provider: %s", err.Error())
+		return
+	}
+
+	// Validate ComputeProvider
+	err = provider.Validate(computeProvider, 5)
+	if err != nil {
+		klog.V(1).Infof("[Error]: Failed to validate provider: %s", err.Error())
 		return
 	}
 
 	// Determine the best turndown strategy to use based on provider
-	strategy, err := strategyForProvider(kubeClient, provider)
+	strategy, err := strategyForProvider(kubeClient, computeProvider)
 	if err != nil {
 		klog.V(1).Infof("Failed to create strategy: %s", err.Error())
 		return
 	}
 
 	// Turndown Management and Scheduler
-	manager := turndown.NewKubernetesTurndownManager(kubeClient, provider, strategy, node)
+	manager := turndown.NewKubernetesTurndownManager(kubeClient, computeProvider, strategy, node)
 	scheduler := turndown.NewTurndownScheduler(manager, scheduleStore)
 
 	// Run TurndownSchedule Kubernetes Resource Controller
 	runTurndownResourceController(kubeClient, tdClient, scheduler, stopCh)
 
 	// Run Turndown Endpoints
-	runWebServer(tdClient, scheduler, manager, provider)
+	runWebServer(kubeClient, tdClient, scheduler, manager, computeProvider)
 }

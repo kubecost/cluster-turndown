@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubecost/kubecost-turndown/pkg/async"
-	"github.com/kubecost/kubecost-turndown/pkg/file"
-	"github.com/kubecost/kubecost-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/file"
+	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	gax "github.com/googleapis/gax-go/v2"
 	container "google.golang.org/genproto/googleapis/container/v1"
@@ -25,7 +25,7 @@ const (
 	LabelGKENodePool      = "cloud.google.com/gke-nodepool"
 	GKECredsEnvVar        = "GOOGLE_APPLICATION_CREDENTIALS"
 	GKEAuthServiceAccount = "/var/keys/service-key.json"
-	GKETurndownPoolName   = "kubecost-turndown"
+	GKETurndownPoolName   = "cluster-turndown"
 )
 
 var (
@@ -90,7 +90,7 @@ func (p *GKEProvider) IsTurndownNodePool() bool {
 	req := &container.GetNodePoolRequest{
 		ProjectId:  p.metadata.GetProjectID(),
 		ClusterId:  p.metadata.GetClusterID(),
-		Zone:       p.metadata.GetZone(),
+		Zone:       p.metadata.GetMasterZone(),
 		NodePoolId: GKETurndownPoolName,
 	}
 
@@ -137,7 +137,7 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	resp, err := p.clusterManager.CreateNodePool(ctx, &container.CreateNodePoolRequest{
 		ProjectId: p.metadata.GetProjectID(),
 		ClusterId: p.metadata.GetClusterID(),
-		Zone:      p.metadata.GetZone(),
+		Zone:      p.metadata.GetMasterZone(),
 		NodePool:  nodePool,
 	})
 
@@ -163,7 +163,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	ctx := context.TODO()
 
 	projectID := p.metadata.GetProjectID()
-	zone := p.metadata.GetZone()
+	zone := p.metadata.GetMasterZone()
 	cluster := p.metadata.GetClusterID()
 
 	req := &container.ListNodePoolsRequest{
@@ -213,6 +213,10 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 }
 
 func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
@@ -268,6 +272,10 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 }
 
 func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
+	if len(nodePools) == 0 {
+		return nil
+	}
+
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{

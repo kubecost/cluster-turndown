@@ -18,11 +18,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"github.com/kubecost/kubecost-turndown/pkg/apis/turndownschedule/v1alpha1"
-	clientset "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned"
-	schedulescheme "github.com/kubecost/kubecost-turndown/pkg/generated/clientset/versioned/scheme"
-	informers "github.com/kubecost/kubecost-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
-	listers "github.com/kubecost/kubecost-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
+	"github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
+	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	schedulescheme "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned/scheme"
+	informers "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
+	listers "github.com/kubecost/cluster-turndown/pkg/generated/listers/turndownschedule/v1alpha1"
 )
 
 const controllerAgentName = "turndown-schedule-controller"
@@ -90,7 +90,7 @@ func NewTurndownScheduleResourceController(
 
 	klog.V(4).Info("Setting up event handlers")
 
-	// Set up an event handler for when Foo resources change
+	// Set up an event handler for when TurndownSchedule resources change
 	schedulesInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    controller.addSchedule,
 		UpdateFunc: controller.updateSchedule,
@@ -113,7 +113,6 @@ func (c *TurndownScheduleResourceController) Run(threadiness int, stopCh <-chan 
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
-	// Launch two workers to process Foo resources
 	for i := 0; i < threadiness; i++ {
 		go wait.Until(c.runWorker, time.Second, stopCh)
 	}
