@@ -166,6 +166,11 @@ func validateSchedule(from time.Time, to time.Time, repeatType *string) error {
 		return fmt.Errorf("The end time (%s) was set to a time before the start parameter (%s).", to, from)
 	}
 
+	// Set minimum start/end delta to 20 minutes -- somewhat arbitrary, but avoid collisions between scaleup and scaledown
+	if delta < (time.Minute * 20) {
+		return fmt.Errorf("The start time (%s) and end time (%s) must be at least 20 mins apart.", from, to)
+	}
+
 	// Check To relative to Now
 	now := time.Now()
 	if now.After(from) {

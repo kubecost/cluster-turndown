@@ -94,7 +94,7 @@ spec:
   repeat: daily
 ```
 
-This definition will create a schedule that starts by turning down at the designated `start` date-time and turning back up at the designated `end` date-time. There are three possible values for `repeat`:
+This definition will create a schedule that starts by turning down at the designated `start` date-time and turning back up at the designated `end` date-time. Both the `start` and `end` times should be in [RFC3339](https://tools.ietf.org/html/rfc3339) format. There are three possible values for `repeat`:
 * **none**: Single schedule turndown and turnup. 
 * **daily**: Start and End times will reschedule every 24 hours.
 * **weekly**: Start and End times will reschedule every 7 days.
