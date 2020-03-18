@@ -90,7 +90,7 @@ func (p *GKEProvider) IsTurndownNodePool() bool {
 	req := &container.GetNodePoolRequest{
 		ProjectId:  p.metadata.GetProjectID(),
 		ClusterId:  p.metadata.GetClusterID(),
-		Zone:       p.metadata.GetZone(),
+		Zone:       p.metadata.GetMasterZone(),
 		NodePoolId: GKETurndownPoolName,
 	}
 
@@ -137,7 +137,7 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	resp, err := p.clusterManager.CreateNodePool(ctx, &container.CreateNodePoolRequest{
 		ProjectId: p.metadata.GetProjectID(),
 		ClusterId: p.metadata.GetClusterID(),
-		Zone:      p.metadata.GetZone(),
+		Zone:      p.metadata.GetMasterZone(),
 		NodePool:  nodePool,
 	})
 
@@ -163,7 +163,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	ctx := context.TODO()
 
 	projectID := p.metadata.GetProjectID()
-	zone := p.metadata.GetZone()
+	zone := p.metadata.GetMasterZone()
 	cluster := p.metadata.GetClusterID()
 
 	req := &container.ListNodePoolsRequest{

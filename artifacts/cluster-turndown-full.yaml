@@ -239,3 +239,16 @@ spec:
             repeat: 
               type: string
               enum: [none, daily, weekly]
+  additionalPrinterColumns:
+  - name: State
+    type: string
+    description: The state of the turndownschedule 
+    JSONPath: .status.state
+  - name: Next Turndown
+    type: string
+    description: The next turndown date-time
+    JSONPath: .status.nextScaleDownTime
+  - name: Next Turn Up
+    type: string
+    description: The next turn up date-time
+    JSONPath: .status.nextScaleUpTime
