@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	KubecostFlattenerOmit = []string{"cluster-turndown", "kube-dns", "kube-dns-autoscaler"}
+	KubecostFlattenerOmit = []string{"kube-dns", "kube-dns-autoscaler"}
 )
 
 // TurndownManager is an implementation prototype for an object capable of managing
@@ -105,16 +105,22 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 		return err
 	}
 
-	// Locate turndown namespace -- default to kubecost
+	// Locate turndown namespace -- default to turndown
 	ns := os.Getenv("TURNDOWN_NAMESPACE")
 	if ns == "" {
-		ns = "kubecost"
+		ns = "turndown"
+	}
+
+	// Locate deployment name -- default to cluster-turndown
+	deploymentName := os.Getenv("TURNDOWN_DEPLOYMENT")
+	if deploymentName == "" {
+		deploymentName = "cluster-turndown"
 	}
 
 	ktdm.log.Log("Applying Tolerations and Node Selector to turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("cluster-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -327,16 +333,22 @@ func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
 		return err
 	}
 
-	// Locate turndown namespace -- default to kubecost
+	// Locate turndown namespace -- default to turndown
 	ns := os.Getenv("TURNDOWN_NAMESPACE")
 	if ns == "" {
-		ns = "kubecost"
+		ns = "turndown"
+	}
+
+	// Locate deployment name -- default to cluster-turndown
+	deploymentName := os.Getenv("TURNDOWN_DEPLOYMENT")
+	if deploymentName == "" {
+		deploymentName = "cluster-turndown"
 	}
 
 	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get("cluster-turndown", metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

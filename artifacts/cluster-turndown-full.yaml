@@ -179,7 +179,7 @@ spec:
     spec:
       containers:
       - name: cluster-turndown
-        image: gcr.io/kubecost1/cluster-turndown:v1.0-SNAPSHOT
+        image: gcr.io/kubecost1/cluster-turndown:v1.0
         volumeMounts:
         - name: turndown-keys
           mountPath: /var/keys
@@ -192,6 +192,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: TURNDOWN_DEPLOYMENT
+          value: cluster-turndown
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /var/keys/service-key.json
         ports:
