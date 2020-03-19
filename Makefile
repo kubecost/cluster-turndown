@@ -1,4 +1,4 @@
-VERSION=v1.0
+VERSION=v1.1-SNAPSHOT
 REGISTRY=gcr.io
 PROJECT_ID=kubecost1
 APPNAME=cluster-turndown
