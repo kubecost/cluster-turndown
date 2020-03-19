@@ -3,7 +3,10 @@
 
 PROJECT_ID=$1
 SERVICE_ACCOUNT_NAME=$2
+NAMESPACE=$3
 DIR=`pwd`
+
+is_default=0
 
 usage() {
     echo "$1"
@@ -17,6 +20,9 @@ usage() {
     echo "   Service Account Name: "
     echo "   The desired service account name to create"
     echo ""
+    echo "   Namespace (Optional, Default: turndown): "
+    echo "   The desired namespace to use with the secret. If this namespace is left empty, 'turndown' is used."
+    echo ""
 }
 
 if [ "$PROJECT_ID" == "help" ]; then
@@ -27,6 +33,11 @@ fi
 if [ "$PROJECT_ID" == "" ] || [ "$SERVICE_ACCOUNT_NAME" == "" ]; then
     usage "Invalid Parameters"
     exit 1
+fi
+
+if [ "$NAMESPACE" == "" ]; then
+    NAMESPACE="turndown"
+    is_default=1
 fi
 
 # Generate a yaml input with desired permissions for running turndown on GKE
@@ -63,24 +74,23 @@ if [ "$?" == "1" ]; then
     exit 1
 fi
 
-# Instead of using gcloud to try and force kubectl to update kubeconfig current-context, 
-# we'll just note that kubectl should be set to the correct context beforehand
-# gcloud container clusters get-credentials $CLUSTER_ID
-
-# Create the turndown namespace
-cat <<EOF | kubectl apply -f -
+# Create the turndown namespace only if turndown is used
+if [ "$is_default" == "1" ]; then 
+    cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Namespace
 metadata:
   name: turndown
 EOF
 
+fi
+
 # Determine if there is already a key 
-kubectl describe secret cluster-turndown-service-key -n turndown > /dev/null 2>&1
+kubectl describe secret cluster-turndown-service-key -n $NAMESPACE > /dev/null 2>&1
 if [ "$?" == "0" ]; then
     echo "Located an existing secret 'cluster-turndown-service-key'. Deleting..."
-    kubectl delete secret cluster-turndown-service-key -n turndown
+    kubectl delete secret cluster-turndown-service-key -n $NAMESPACE
 fi
 
 # Create the Secret containing the service key
-kubectl create secret generic cluster-turndown-service-key -n turndown --from-file=$DIR/service-key.json
+kubectl create secret generic cluster-turndown-service-key -n $NAMESPACE --from-file=$DIR/service-key.json
