@@ -56,11 +56,11 @@ $ kubectl create secret generic cluster-turndown-service-key -n turndown --from-
 
 ---
 
-### Enabling the Turndown Deployment
+## Deploying
 After completing setup, run the following command to get the `cluster-turndown` pod running on your cluster:
 
 ```bash
-$ kubectl apply -f artifacts/cluster-turndown-full.yaml
+$ kubectl apply -f https://github.com/kubecost/cluster-turndown/tree/master/artifacts/cluster-turndown-full.yaml
 ```
 
 In this yaml, you'll find the definitions for the following:
@@ -94,7 +94,7 @@ spec:
   repeat: daily
 ```
 
-This definition will create a schedule that starts by turning down at the designated `start` date-time and turning back up at the designated `end` date-time. Both the `start` and `end` times should be in [RFC3339](https://tools.ietf.org/html/rfc3339) format. There are three possible values for `repeat`:
+This definition will create a schedule that starts by turning down at the designated `start` date-time and turning back up at the designated `end` date-time. Both the `start` and `end` times should be in [RFC3339](https://tools.ietf.org/html/rfc3339) format, i.e. times based on offsets to UTC. There are three possible values for `repeat`:
 * **none**: Single schedule turndown and turnup. 
 * **daily**: Start and End times will reschedule every 24 hours.
 * **weekly**: Start and End times will reschedule every 7 days.
@@ -186,6 +186,7 @@ Additionally, if the turndown schedule is cancelled between a turndown and turn 
 ### Limitations
 * The internal scheduler only allows one schedule at a time to be used. Any additional schedule resources created will fail (`kubectl get tds -o yaml` will display the status).
 * **DO NOT** attempt to `kubectl edit` a turndown schedule. This is currently not supported. Recommended approach for modifying is to delete and then create a new schedule.
+* 20-minute minimim time window between start and end of turndown schedule
 
 ## Turndown Strategies
 
