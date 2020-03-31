@@ -88,10 +88,8 @@ func (p *GKEProvider) IsTurndownNodePool() bool {
 	ctx := context.TODO()
 
 	req := &container.GetNodePoolRequest{
-		ProjectId:  p.metadata.GetProjectID(),
-		ClusterId:  p.metadata.GetClusterID(),
-		Zone:       p.metadata.GetMasterZone(),
-		NodePoolId: GKETurndownPoolName,
+		Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+			p.metadata.GetProjectID(), p.metadata.GetMasterZone(), p.metadata.GetClusterID(), GKETurndownPoolName),
 	}
 
 	resp, err := p.clusterManager.GetNodePool(ctx, req)
@@ -135,10 +133,9 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 	}
 
 	resp, err := p.clusterManager.CreateNodePool(ctx, &container.CreateNodePoolRequest{
-		ProjectId: p.metadata.GetProjectID(),
-		ClusterId: p.metadata.GetClusterID(),
-		Zone:      p.metadata.GetMasterZone(),
-		NodePool:  nodePool,
+		NodePool: nodePool,
+		Parent: fmt.Sprintf("projects/%s/locations/%s/clusters/%s",
+			p.metadata.GetProjectID(), p.metadata.GetMasterZone(), p.metadata.GetClusterID()),
 	})
 
 	if err != nil {
@@ -167,9 +164,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	cluster := p.metadata.GetClusterID()
 
 	req := &container.ListNodePoolsRequest{
-		ProjectId: projectID,
-		Zone:      zone,
-		ClusterId: cluster,
+		Parent: fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, zone, cluster),
 	}
 	p.log.Log("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
 
@@ -220,11 +215,9 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			ProjectId:  nodePool.Project(),
-			ClusterId:  nodePool.ClusterID(),
-			Zone:       nodePool.Zone(),
-			NodePoolId: nodePool.Name(),
-			NodeCount:  size,
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+				nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name()),
+			NodeCount: size,
 		})
 
 		p.log.Log("Resizing NodePool to 0 [Proj: %s, ClusterId: %s, Zone: %s, PoolID: %s]",
@@ -279,11 +272,9 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			ProjectId:  nodePool.Project(),
-			ClusterId:  nodePool.ClusterID(),
-			Zone:       nodePool.Zone(),
-			NodePoolId: nodePool.Name(),
-			NodeCount:  nodePool.NodeCount(),
+			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+				nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name()),
+			NodeCount: nodePool.NodeCount(),
 		})
 
 		p.log.Log("Resizing NodePool to 0 %d [Proj: %s, ClusterId: %s, Zone: %s, PoolId: %s]",
