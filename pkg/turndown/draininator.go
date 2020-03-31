@@ -144,6 +144,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 		d.mirrorFilter,
 		d.localStorageFilter,
 		d.unreplicatedFilter,
+		d.autoscalerFilter,
 	}
 	for _, pod := range allPods.Items {
 		deletable := true
