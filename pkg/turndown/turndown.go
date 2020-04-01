@@ -3,8 +3,9 @@ package turndown
 import (
 	"os"
 
+	"github.com/kubecost/cluster-turndown/pkg/cluster"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
 
@@ -172,7 +173,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// If this cluster has autoscaling nodes, we consider the entire cluster
 	// autoscaling. Run Flatten on the cluster to reduce deployments and daemonsets
 	// to 0 replicas. Otherwise, just suspend cron jobs
-	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if isAutoScalingCluster {
 		ktdm.log.Log("Found Cluster-AutoScaler. Flattening Cluster...")
 
@@ -211,7 +212,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		draininator := NewDraininator(ktdm.client, n.Name)
+		draininator := cluster.NewDraininator(ktdm.client, n.Name)
 		err = draininator.Drain()
 		if err != nil {
 			ktdm.log.Err("Failed: %s - Error: %s", n.Name, err.Error())
@@ -276,7 +277,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 			ktdm.log.Err("Failed to load NodeGroups: %s", err.Error())
 
 			// Check for autoscaling expansion
-			flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+			flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 
 			isAutoscaling := flattener.IsClusterFlattened()
 			ktdm.autoScaling = &isAutoscaling
@@ -296,7 +297,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	}
 
 	// 3. Expand Autoscaling Nodes or Resume Jobs
-	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if ktdm.autoScaling != nil && *ktdm.autoScaling {
 		ktdm.log.Log("Expanding Cluster...")
 

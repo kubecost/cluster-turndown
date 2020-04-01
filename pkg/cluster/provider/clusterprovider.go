@@ -7,6 +7,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/kubernetes"
@@ -15,6 +16,7 @@ import (
 
 // ClusterProvider contains methods used to manage cluster node resources
 type ClusterProvider interface {
+	GetNodesFor(np NodePool) ([]*v1.Node, error)
 	GetNodePools() ([]NodePool, error)
 	CreateNodePool(c context.Context, name, machineType string, nodeCount int32, diskType string, diskSizeGB int32, labels map[string]string) error
 	CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error
@@ -36,6 +38,7 @@ type NodePool interface {
 	AutoScaling() bool
 	MachineType() string
 	Tags() map[string]string
+	IsMaster() bool
 }
 
 var _ = klog.V(1)

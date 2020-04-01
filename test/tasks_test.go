@@ -90,7 +90,13 @@ func TestSerialExecution(t *testing.T) {
 
 	ts, _ := dummyTasks(numTasks, &counter, errorAtIndex)
 
-	err := tasks.ExecuteSerially(ts, "Execute ScaleDown")
+	var err error
+	runningTask := tasks.ExecuteSerially(ts, "Execute ScaleDown")
+
+	select {
+	case err = <-runningTask.OnComplete():
+	}
+
 	if err != nil {
 		t.Errorf(taskErrorLogMessage(err))
 		return
@@ -115,7 +121,13 @@ func TestSerialExecutionFailure(t *testing.T) {
 
 	ts, errTask := dummyTasks(numTasks, &counter, errorAtIndex)
 
-	err := tasks.ExecuteSerially(ts, "Execute ScaleDown")
+	var err error
+	runningTask := tasks.ExecuteSerially(ts, "Execute ScaleDown")
+
+	select {
+	case err = <-runningTask.OnComplete():
+	}
+
 	if err == nil {
 		t.Errorf("Expected Errorf After %d Tasks Executed. Actual: %d", errorAtIndex-1, counter)
 		return

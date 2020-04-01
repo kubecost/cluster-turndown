@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -33,6 +33,7 @@ type Draininator struct {
 	force              bool
 	ignoreDaemonSets   bool
 	deleteLocalData    bool
+	ignorePods 		   []string
 	log                logging.NamedLogger
 }
 
@@ -40,7 +41,7 @@ type Draininator struct {
 type PodFilter func(v1.Pod) (bool, error)
 
 // Creates a new Draininator instance for a specific node.
-func NewDraininator(client kubernetes.Interface, node string) *Draininator {
+func NewDraininator(client kubernetes.Interface, node string, ignorePods []string) *Draininator {
 	return &Draininator{
 		client: client,
 		node:   node,
@@ -50,6 +51,7 @@ func NewDraininator(client kubernetes.Interface, node string) *Draininator {
 		force:              true,
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
+		ignorePods: 		ignorePods,
 		log:                logging.NamedLogger("Draininator"),
 	}
 }
@@ -143,7 +145,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 		d.daemonSetFilter,
 		d.mirrorFilter,
 		d.localStorageFilter,
-		d.unreplicatedFilter,
+		d.unreplicatedFilter
 	}
 	for _, pod := range allPods.Items {
 		deletable := true

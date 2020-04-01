@@ -25,6 +25,16 @@ type GKEMetaData struct {
 	cache  map[string]string
 }
 
+type UserAgentTransport struct {
+	userAgent string
+	base      http.RoundTripper
+}
+
+func (t UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", t.userAgent)
+	return t.base.RoundTrip(req)
+}
+
 func NewGKEMetaData() *GKEMetaData {
 	c := metadata.NewClient(&http.Client{
 		Transport: UserAgentTransport{

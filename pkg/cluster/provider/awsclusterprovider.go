@@ -91,6 +91,7 @@ func (np *AWSNodePool) NodeCount() int32        { return int32(aws.Int64Value(np
 func (np *AWSNodePool) AutoScaling() bool       { return false }
 func (np *AWSNodePool) MachineType() string     { return aws.StringValue(np.lc.InstanceType) }
 func (np *AWSNodePool) Tags() map[string]string { return np.tags }
+func (np *AWSNodePool) IsMaster() bool          { _, ok := np.tags["k8s.io/role/master"]; return ok }
 
 //--------------------------------------------------------------------------
 //  AWS Access Key Representation
@@ -296,9 +297,12 @@ func (p *AWSClusterData) updateUserData(userData *string) {
 	second := []string{}
 	end := []string{}
 
-	var clusterBucket string
-	var clusterName string
-	var current *[]string = &first
+	var (
+		clusterBucket string
+		clusterName   string
+		current       *[]string = &first
+	)
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -408,6 +412,33 @@ func NewAWSProvider(kubernetes kubernetes.Interface) ClusterProvider {
 	}
 }
 
+func (p *AWSProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
+	awsNodeGroup, ok := np.(*AWSNodePool)
+	if !ok {
+		return nil, fmt.Errorf("NodePool is not from AWS")
+	}
+
+	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	instanceIDs := make(map[string]bool)
+	for _, instance := range awsNodeGroup.asg.Instances {
+		instanceIDs[aws.StringValue(instance.InstanceId)] = true
+	}
+
+	nodes := []*v1.Node{}
+	for _, n := range allNodes.Items {
+		_, instID := p.instanceInfoFor(&n)
+		if _, ok := instanceIDs[instID]; ok {
+			nodes = append(nodes, &n)
+		}
+	}
+
+	return nodes, nil
+}
+
 // GetNodePools for AWS needs to do a bit more work to acquire a list of "correct" node pools. Since
 // the asusmption is that we're working with kops, a specific region could have many autoscaling groups,
 // so we'll need to refine the list down to the groups associated with kubernetes nodes.
@@ -474,10 +505,12 @@ func (p *AWSProvider) GetNodePools() ([]NodePool, error) {
 	launchConfigs := make(map[string]*autoscaling.LaunchConfiguration)
 	securityGroups := []*string{}
 
-	var iamProfile *string
-	var imageID *string
-	var keyName *string
-	var userData *string
+	var (
+		iamProfile *string
+		imageID    *string
+		keyName    *string
+		userData   *string
+	)
 
 	// Create a mapping from instanceType -> launch configurations,
 	// and collect data required to recreate a launch configuration

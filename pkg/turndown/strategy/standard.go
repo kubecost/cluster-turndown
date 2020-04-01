@@ -3,7 +3,7 @@ package strategy
 import (
 	"fmt"
 
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 
 	appsv1 "k8s.io/api/apps/v1"

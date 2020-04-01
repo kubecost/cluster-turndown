@@ -60,6 +60,23 @@ func TaskForError(e error) Task {
 }
 
 //--------------------------------------------------------------------------
+//  Executor
+//--------------------------------------------------------------------------
+
+// Executor is an implementation prototype for an object capable of running multiple
+// tasks
+type Executor interface {
+	// Whether or not the executor is running
+	IsRunning() bool
+
+	// Executes each child task serially and reports any errors
+	Execute() error
+
+	// Description returns a description of the execution steps.
+	Description() string
+}
+
+//--------------------------------------------------------------------------
 //  Task
 //--------------------------------------------------------------------------
 
@@ -71,6 +88,16 @@ type Task interface {
 
 	// Description of the task.
 	Description() string
+}
+
+// RunningTask is an implementation prototype for the execution of a task in the running
+// state.
+type RunningTask interface {
+	// Description of the task.
+	Description() string
+
+	// The completion channel
+	OnComplete() <-chan error
 }
 
 //--------------------------------------------------------------------------
@@ -203,7 +230,7 @@ type SerialExecutor struct {
 
 // NewSerialExecutor creates a new SerialExecutor, which can execute the slice of tasks
 // serially.
-func NewSerialExecutor(tasks []Task, description string) *SerialExecutor {
+func NewSerialExecutor(tasks []Task, description string) Executor {
 	return &SerialExecutor{
 		tasks:       NewTaskQueue(tasks),
 		description: description,
@@ -213,7 +240,7 @@ func NewSerialExecutor(tasks []Task, description string) *SerialExecutor {
 	}
 }
 
-// Executes each child task serially and reports any errors
+// Wheather or not the task is running
 func (se *SerialExecutor) IsRunning() bool {
 	return se.running.Get()
 }
@@ -293,34 +320,41 @@ func (se *SerialExecutor) updateCurrent(task Task) {
 	se.current = task
 }
 
-// This is a stand-in right now. Plans would be to keep a thread-safe map of
-// executors globally so status can be queried.
-//
-// Imagine something like this:
-// Right-Size Endpoint (Thread 1) ->
-//   func ExecuteSerially(id string, tasks []Task, description string) Task {
-//       t := NewSerialExecutor(tasks, description)
-//
-//       lock.Lock()
-//       executors[id] = t
-//       lock.Unlock()
-//
-//       return t.Execute()
-//   }
-//
-// Right-Size Status Endpoint (Thread 2) ->
-//   func StatusOf(id string) string {
-//       lock.RLock()
-//       defer lock.RUnlock()
-//
-//       return executors[id].Description()
-//   }
-//
-// ExecuteSerially will run synchronously but the SerialExecutor (also a Task implementation) will
-// be stored in a global map (or even just as a singleton if we only allow single executions at a time).
-// StatusOf will return the description of the executor, which returns something like:
-//    "[<Executor Description>] <Currently Executing Task Description>"
-//
+//--------------------------------------------------------------------------
+//  Running Executor
+//--------------------------------------------------------------------------
+
+type RunningExecutor struct {
+	executor   Executor
+	onComplete chan error
+}
+
+func RunExecutor(e Executor) RunningTask {
+	re := &RunningExecutor{
+		executor:   e,
+		onComplete: make(chan error, 1),
+	}
+
+	go func() {
+		err := re.executor.Execute()
+		re.onComplete <- err
+	}()
+
+	return re
+}
+
+func (re *RunningExecutor) Description() string {
+	if !re.executor.IsRunning() {
+		return "Not Running"
+	}
+
+	return re.executor.Description()
+}
+
+func (re *RunningExecutor) OnComplete() <-chan error {
+	return re.onComplete
+}
+
 // This API felt really flexible for a few main reasons:
 //   * The Description automatically updates on the executor based on it's currently executing task,
 //     and is thread safe.
@@ -330,6 +364,6 @@ func (se *SerialExecutor) updateCurrent(task Task) {
 //   * Errors returned by Task.Execute() have a pointer to the Task that caused the error that can be retrieved
 //     using tasks.TaskFromError(err error) Task
 //
-func ExecuteSerially(tasks []Task, description string) error {
-	return NewSerialExecutor(tasks, description).Execute()
+func ExecuteSerially(tasks []Task, description string) RunningTask {
+	return RunExecutor(NewSerialExecutor(tasks, description))
 }

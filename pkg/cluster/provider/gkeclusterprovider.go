@@ -16,6 +16,7 @@ import (
 	container "google.golang.org/genproto/googleapis/container/v1"
 
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	gke "cloud.google.com/go/container/apiv1"
@@ -97,6 +98,7 @@ func (np *GKENodePool) NodeCount() int32        { return np.count }
 func (np *GKENodePool) AutoScaling() bool       { return np.autoscaling }
 func (np *GKENodePool) MachineType() string     { return np.machineType }
 func (np *GKENodePool) Tags() map[string]string { return np.tags }
+func (np *GKENodePool) IsMaster() bool          { return false }
 
 //--------------------------------------------------------------------------
 //  GKE ClusterProvider Implementation
@@ -123,6 +125,25 @@ func NewGKEProvider(kubernetes kubernetes.Interface) ClusterProvider {
 		metadata:       NewGKEMetaData(),
 		log:            logging.NamedLogger("GKEProvider"),
 	}
+}
+
+func (p *GKEProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
+	name := np.Name()
+
+	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := []*v1.Node{}
+	for _, n := range allNodes.Items {
+		_, _, nodePool := p.projectInfoFor(&n)
+		if strings.EqualFold(nodePool, name) {
+			nodes = append(nodes, &n)
+		}
+	}
+
+	return nodes, nil
 }
 
 // GetNodePools returns all of the node pools for the cluster provider.
