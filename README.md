@@ -5,13 +5,7 @@ Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's
 
 ### GKE Setup
 
-We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details on helper scripts can be located in the [scripts](scripts/README.md) sub-directory. 
-
-##### Prerequisites
-Note that in order to run `gke-create-service-key.sh` successfully, you will need:
-* Google Cloud, `gcloud` installed and authenticated. 
-* `kubectl` installed  with target cluster in kubeconfig
-    * `kubectl config current-context` should point to the target cluster before running the script.
+We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details can be found in the [scripts](scripts/README.md) sub-directory. 
     
 ##### Running the Setup Script
 To use [this setup script](scripts/gke-create-service-key.sh) supply the following parameters:
