@@ -134,8 +134,7 @@ func (p *GKEProvider) CreateSingletonNodePool() error {
 
 	resp, err := p.clusterManager.CreateNodePool(ctx, &container.CreateNodePoolRequest{
 		NodePool: nodePool,
-		Parent: fmt.Sprintf("projects/%s/locations/%s/clusters/%s",
-			p.metadata.GetProjectID(), p.metadata.GetMasterZone(), p.metadata.GetClusterID()),
+		Parent:   p.getClusterResourcePath(),
 	})
 
 	if err != nil {
@@ -163,9 +162,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	zone := p.metadata.GetMasterZone()
 	cluster := p.metadata.GetClusterID()
 
-	req := &container.ListNodePoolsRequest{
-		Parent: fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, zone, cluster),
-	}
+	req := &container.ListNodePoolsRequest{Parent: p.getClusterResourcePath()}
 	p.log.Log("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
 
 	resp, err := p.clusterManager.ListNodePools(ctx, req, options...)
@@ -215,8 +212,7 @@ func (p *GKEProvider) SetNodePoolSizes(nodePools []NodePool, size int32) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
-				nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name()),
+			Name:      p.toNodePoolResource(nodePool),
 			NodeCount: size,
 		})
 
@@ -272,8 +268,7 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []NodePool) error {
 	requests := []*container.SetNodePoolSizeRequest{}
 	for _, nodePool := range nodePools {
 		requests = append(requests, &container.SetNodePoolSizeRequest{
-			Name: fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
-				nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name()),
+			Name:      p.toNodePoolResource(nodePool),
 			NodeCount: nodePool.NodeCount(),
 		})
 
@@ -337,6 +332,20 @@ func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string
 	project = props[0]
 	zone = props[1]
 	return
+}
+
+// gets the fully qualified resource path for the node pool
+func (p *GKEProvider) toNodePoolResource(nodePool NodePool) string {
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+		nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name())
+}
+
+// gets the fully qualified resource path for the cluster
+func (p *GKEProvider) getClusterResourcePath() string {
+	md := p.metadata
+	pid, z, cid := md.GetProjectID(), md.GetMasterZone(), md.GetClusterID()
+
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", pid, z, cid)
 }
 
 func newGKEClusterManager() (*gke.ClusterManagerClient, error) {

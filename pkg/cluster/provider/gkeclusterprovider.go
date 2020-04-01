@@ -154,11 +154,7 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	zone := p.metadata.GetMasterZone()
 	cluster := p.metadata.GetClusterID()
 
-	req := &container.ListNodePoolsRequest{
-		ProjectId: projectID,
-		Zone:      zone,
-		ClusterId: cluster,
-	}
+	req := &container.ListNodePoolsRequest{Parent: p.getClusterResourcePath()}
 	p.log.Log("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
 
 	resp, err := p.clusterManager.ListNodePools(ctx, req)
@@ -215,9 +211,7 @@ func (p *GKEProvider) CreateNodePool(c context.Context, name, machineType string
 
 	// Create the request, fill in necessary defaults
 	request := &container.CreateNodePoolRequest{
-		ProjectId: p.metadata.GetProjectID(),
-		ClusterId: p.metadata.GetClusterID(),
-		Zone:      p.metadata.GetMasterZone(),
+		Parent: p.getClusterResourcePath(),
 		NodePool: &container.NodePool{
 			Name: name,
 			Config: &container.NodeConfig{
@@ -273,9 +267,7 @@ func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machine
 
 	// Create the request, fill in necessary defaults
 	request := &container.CreateNodePoolRequest{
-		ProjectId: p.metadata.GetProjectID(),
-		ClusterId: p.metadata.GetClusterID(),
-		Zone:      p.metadata.GetMasterZone(),
+		Parent: p.getClusterResourcePath(),
 		NodePool: &container.NodePool{
 			Name: name,
 			Config: &container.NodeConfig{
@@ -328,11 +320,8 @@ func (p *GKEProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, s
 	}
 
 	request := &container.SetNodePoolSizeRequest{
-		ProjectId:  nodePool.Project(),
-		ClusterId:  nodePool.ClusterID(),
-		Zone:       nodePool.Zone(),
-		NodePoolId: nodePool.Name(),
-		NodeCount:  size,
+		Name:      p.toNodePoolResource(nodePool),
+		NodeCount: size,
 	}
 
 	ctx, cancel := context.WithCancel(c)
@@ -395,10 +384,7 @@ func (p *GKEProvider) DeleteNodePool(c context.Context, nodePool NodePool) error
 	}
 
 	request := &container.DeleteNodePoolRequest{
-		ProjectId:  nodePool.Project(),
-		ClusterId:  nodePool.ClusterID(),
-		Zone:       nodePool.Zone(),
-		NodePoolId: nodePool.Name(),
+		Name: p.toNodePoolResource(nodePool),
 	}
 
 	ctx, cancel := context.WithCancel(c)
@@ -422,7 +408,7 @@ func (p *GKEProvider) DeleteNodePool(c context.Context, nodePool NodePool) error
 		select {
 		case <-time.After(30 * time.Second):
 		case <-ctx.Done():
-			return fmt.Errorf("NodePool Resize Cancelled")
+			return fmt.Errorf("NodePool Deletion Cancelled")
 		}
 	}
 }
@@ -442,6 +428,20 @@ func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string
 	project = props[0]
 	zone = props[1]
 	return
+}
+
+// gets the fully qualified resource path for the node pool
+func (p *GKEProvider) toNodePoolResource(nodePool NodePool) string {
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+		nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name())
+}
+
+// gets the fully qualified resource path for the cluster
+func (p *GKEProvider) getClusterResourcePath() string {
+	md := p.metadata
+	pid, z, cid := md.GetProjectID(), md.GetMasterZone(), md.GetClusterID()
+
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", pid, z, cid)
 }
 
 // Creates a new GKE based cluster manager API to execute GRPC commands

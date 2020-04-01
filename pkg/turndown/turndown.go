@@ -212,7 +212,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		draininator := cluster.NewDraininator(ktdm.client, n.Name)
+		draininator := cluster.NewDraininator(ktdm.client, n.Name, nil)
 		err = draininator.Drain()
 		if err != nil {
 			ktdm.log.Err("Failed: %s - Error: %s", n.Name, err.Error())

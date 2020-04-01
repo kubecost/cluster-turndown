@@ -147,6 +147,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 		d.localStorageFilter,
 		d.unreplicatedFilter,
 		d.autoscalerFilter,
+		d.ignoredPodFilter,
 	}
 	for _, pod := range allPods.Items {
 		deletable := true
@@ -212,6 +213,18 @@ func (d *Draininator) autoscalerFilter(pod v1.Pod) (bool, error) {
 	if found && enabled == "false" {
 		d.log.Debug("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
+	}
+
+	return true, nil
+}
+
+// ignores pods by name specified in the list provided during instantiation
+func (d *Draininator) ignoredPodFilter(pod v1.Pod) (bool, error) {
+	for _, ignoredPod := range d.ignorePods {
+		if strings.EqualFold(ignoredPod, pod.Name) {
+			d.log.Debug("%s is the current pod, it won't be deleted", pod.Name)
+			return false, nil
+		}
 	}
 
 	return true, nil
