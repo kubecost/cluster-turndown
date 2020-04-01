@@ -33,7 +33,7 @@ type Draininator struct {
 	force              bool
 	ignoreDaemonSets   bool
 	deleteLocalData    bool
-	ignorePods 		   []string
+	ignorePods         []string
 	log                logging.NamedLogger
 }
 
@@ -51,7 +51,7 @@ func NewDraininator(client kubernetes.Interface, node string, ignorePods []strin
 		force:              true,
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
-		ignorePods: 		ignorePods,
+		ignorePods:         ignorePods,
 		log:                logging.NamedLogger("Draininator"),
 	}
 }
@@ -145,7 +145,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 		d.daemonSetFilter,
 		d.mirrorFilter,
 		d.localStorageFilter,
-		d.unreplicatedFilter
+		d.unreplicatedFilter,
 	}
 	for _, pod := range allPods.Items {
 		deletable := true
