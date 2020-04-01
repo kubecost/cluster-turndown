@@ -5,7 +5,7 @@ Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's
 
 ### GKE Setup
 
-We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. More details can be found in the [scripts](scripts/README.md) sub-directory. 
+We have provided a shell script capable of performing the required steps in setting up a service account for use with `cluster-turndown`. [More info](scripts/README.md) 
     
 ##### Running the Setup Script
 To use [this setup script](scripts/gke-create-service-key.sh) supply the following parameters:
@@ -15,13 +15,7 @@ $ ./scripts/gke-create-service-key.sh <Project ID> <Service Account Name>
 ```
 The parameters to supply the script are as follows:
 * **Project ID**: The GCP project identifier you can find via: `gcloud config get-value project`
-* **Service Account Name**: The desired service account name to create
-
-Note that if you have run this script more than once, the custom permissions role may have already been created. You may see an error similar to the following:
-```
-ERROR: (gcloud.iam.roles.create) Resource in project [PROJECT_ID] is the subject of a conflict: A role named cluster.turndown in projects/[PROJECT_ID] already exists.
-```
-This error is harmless, as the script should continue.
+* **Service Account Name**: The desired service account name to create, e.g. `turndown-service`
 
 ---
 
@@ -166,16 +160,16 @@ The `Status` field displays the current status of the schedule including next sc
 * **ScaleDownMetadata**: Metadata attached to the scaledown job, assigned by the turndown scheduler.
 * **ScaleUpMetadata**: Metadata attached to the scale up job, assigned by the turndown scheduler.
 
-## Cancelling a Schedule During Turndown
+## Cancelling a Turndown Schedule
 A turndown can be cancelled before turndown actually happens or after. This is performed by deleting the resource:
 
 ```bash
 $ kubectl delete tds example-schedule
 ```
 
-Note that cancelling while turndown is in the act of scaling down or up will result in a delayed cancellation, as the schedule must complete it's operation before processing the deletion/cancellation.
+Note that cancelling while turndown is in the act of scaling down or scaling up will result in a delayed cancellation, as the schedule must complete it's operation before processing the deletion/cancellation.
 
-Additionally, if the turndown schedule is cancelled between a turndown and turn up, the turn up will occur automatically upon cancel. 
+If the turndown schedule is cancelled between a turndown and turn up, the turn up will occur automatically upon cancel. 
 
 ### Limitations
 * The internal scheduler only allows one schedule at a time to be used. Any additional schedule resources created will fail (`kubectl get tds -o yaml` will display the status).
