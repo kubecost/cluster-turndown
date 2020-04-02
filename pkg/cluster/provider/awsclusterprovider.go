@@ -430,9 +430,11 @@ func (p *AWSProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 
 	nodes := []*v1.Node{}
 	for _, n := range allNodes.Items {
-		_, instID := p.instanceInfoFor(&n)
+		node := helper.NodePtr(n)
+
+		_, instID := p.instanceInfoFor(node)
 		if _, ok := instanceIDs[instID]; ok {
-			nodes = append(nodes, &n)
+			nodes = append(nodes, node)
 		}
 	}
 

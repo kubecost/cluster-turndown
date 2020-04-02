@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -55,6 +56,16 @@ func GetAggregateErrors(err error) []error {
 	}
 
 	return []error{err}
+}
+
+//--------------------------------------------------------------------------
+//  Kubernetes API Helpers
+//--------------------------------------------------------------------------
+
+// When looping through a list of node instances via range loop and storing
+// a pointer, use this to copy and return a ptr to the copy
+func NodePtr(n v1.Node) *v1.Node {
+	return &n
 }
 
 //--------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
 	"github.com/kubecost/cluster-turndown/pkg/file"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
 
@@ -137,9 +138,11 @@ func (p *GKEProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 
 	nodes := []*v1.Node{}
 	for _, n := range allNodes.Items {
-		_, _, nodePool := p.projectInfoFor(&n)
+		node := helper.NodePtr(n)
+
+		_, _, nodePool := p.projectInfoFor(node)
 		if strings.EqualFold(nodePool, name) {
-			nodes = append(nodes, &n)
+			nodes = append(nodes, node)
 		}
 	}
 
@@ -234,8 +237,8 @@ func (p *GKEProvider) CreateNodePool(c context.Context, name, machineType string
 	for {
 		_, err := p.clusterManager.CreateNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Created NodePool Successfully: %s", request.NodePool.Name)
-			return nil
+			p.log.Log("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
+			break
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
@@ -251,6 +254,8 @@ func (p *GKEProvider) CreateNodePool(c context.Context, name, machineType string
 			return fmt.Errorf("NodePool Creation Cancelled")
 		}
 	}
+
+	return helper.WaitUntilNodesCreated(p.kubernetes, LabelGKENodePool, name, int(nodeCount), 5*time.Second, 20*time.Minute)
 }
 
 func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error {
@@ -295,8 +300,8 @@ func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machine
 	for {
 		_, err := p.clusterManager.CreateNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Created NodePool Successfully: %s", request.NodePool.Name)
-			return nil
+			p.log.Log("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
+			break
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
@@ -312,6 +317,9 @@ func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machine
 			return fmt.Errorf("NodePool Creation Cancelled")
 		}
 	}
+
+	// wait for at least a single node
+	return helper.WaitUntilNodesCreated(p.kubernetes, LabelGKENodePool, name, 1, 5*time.Second, 20*time.Minute)
 }
 
 func (p *GKEProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
@@ -394,7 +402,7 @@ func (p *GKEProvider) DeleteNodePool(c context.Context, nodePool NodePool) error
 	for {
 		_, err := p.clusterManager.DeleteNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Deleted NodePool Successfully: %s", request.NodePoolId)
+			p.log.Log("Deleted NodePool Successfully: %s", nodePool.Name())
 			return nil
 		}
 
@@ -433,15 +441,13 @@ func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string
 // gets the fully qualified resource path for the node pool
 func (p *GKEProvider) toNodePoolResource(nodePool NodePool) string {
 	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
-		nodePool.Project(), nodePool.ClusterID(), nodePool.Zone(), nodePool.Name())
+		nodePool.Project(), nodePool.Zone(), nodePool.ClusterID(), nodePool.Name())
 }
 
 // gets the fully qualified resource path for the cluster
 func (p *GKEProvider) getClusterResourcePath() string {
-	md := p.metadata
-	pid, z, cid := md.GetProjectID(), md.GetMasterZone(), md.GetClusterID()
-
-	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", pid, z, cid)
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s",
+		p.metadata.GetProjectID(), p.metadata.GetMasterZone(), p.metadata.GetClusterID())
 }
 
 // Creates a new GKE based cluster manager API to execute GRPC commands
