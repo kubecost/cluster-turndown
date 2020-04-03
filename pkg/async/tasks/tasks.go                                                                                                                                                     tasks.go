@@ -60,23 +60,6 @@ func TaskForError(e error) Task {
 }
 
 //--------------------------------------------------------------------------
-//  Executor
-//--------------------------------------------------------------------------
-
-// Executor is an implementation prototype for an object capable of running multiple
-// tasks
-type Executor interface {
-	// Whether or not the executor is running
-	IsRunning() bool
-
-	// Executes each child task serially and reports any errors
-	Execute() error
-
-	// Description returns a description of the execution steps.
-	Description() string
-}
-
-//--------------------------------------------------------------------------
 //  Task
 //--------------------------------------------------------------------------
 
@@ -101,6 +84,19 @@ type RunningTask interface {
 }
 
 //--------------------------------------------------------------------------
+//  Executor
+//--------------------------------------------------------------------------
+
+// Executor is an implementation prototype for an object capable of running multiple
+// tasks
+type Executor interface {
+	Task
+
+	// Whether or not the executor is running
+	IsRunning() bool
+}
+
+//--------------------------------------------------------------------------
 //  funcTask
 //--------------------------------------------------------------------------
 
@@ -118,14 +114,6 @@ func (t *funcTask) Execute() error {
 // Description returns a description of the task.
 func (t *funcTask) Description() string {
 	return t.description
-}
-
-// TaskFromFunc returns a Task implementation for a func() error.
-func TaskFromFunc(fn func() error, description string) Task {
-	return &funcTask{
-		fn:          fn,
-		description: description,
-	}
 }
 
 //--------------------------------------------------------------------------
@@ -324,11 +312,41 @@ func (se *SerialExecutor) updateCurrent(task Task) {
 //  Running Executor
 //--------------------------------------------------------------------------
 
+// RunningExecutor is an implementation of RunningTask which executes an
+// Executor on a separate go routine, then returns the result over a channel.
 type RunningExecutor struct {
 	executor   Executor
 	onComplete chan error
 }
 
+// Description returns the description of the executor.
+func (re *RunningExecutor) Description() string {
+	if !re.executor.IsRunning() {
+		return "Not Running"
+	}
+
+	return re.executor.Description()
+}
+
+// OnComplete returns the outbound channel that occurs when the executor is complete
+func (re *RunningExecutor) OnComplete() <-chan error {
+	return re.onComplete
+}
+
+//--------------------------------------------------------------------------
+//  tasks Methods
+//--------------------------------------------------------------------------
+
+// TaskFromFunc returns a Task implementation for a func() error.
+func TaskFromFunc(fn func() error, description string) Task {
+	return &funcTask{
+		fn:          fn,
+		description: description,
+	}
+}
+
+// RunExecutor creates a new RunningTask implementation and starts executing the
+// Executor in a separate go routine
 func RunExecutor(e Executor) RunningTask {
 	re := &RunningExecutor{
 		executor:   e,
@@ -343,27 +361,8 @@ func RunExecutor(e Executor) RunningTask {
 	return re
 }
 
-func (re *RunningExecutor) Description() string {
-	if !re.executor.IsRunning() {
-		return "Not Running"
-	}
-
-	return re.executor.Description()
-}
-
-func (re *RunningExecutor) OnComplete() <-chan error {
-	return re.onComplete
-}
-
-// This API felt really flexible for a few main reasons:
-//   * The Description automatically updates on the executor based on it's currently executing task,
-//     and is thread safe.
-//   * The Executor is a Task itself, so you can build out grouped executions
-//   * Errors that occur mid-execution push the remaining tasks on a new TaskQueue. Remaining tasks (including the
-//     failed task) can easily be retried. Retry logic not written yet.
-//   * Errors returned by Task.Execute() have a pointer to the Task that caused the error that can be retrieved
-//     using tasks.TaskFromError(err error) Task
-//
+// ExecuteSerially executes the provided tasks in order asynchronously via RunningTask, and returns the
+// running task.
 func ExecuteSerially(tasks []Task, description string) RunningTask {
 	return RunExecutor(NewSerialExecutor(tasks, description))
 }
