@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
+	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 
@@ -44,17 +45,13 @@ func (mts *MasterlessTurndownStrategy) TaintKey() string {
 // This method will locate or create a node, apply a specific taint and
 // label, and return the updated kubernetes Node instance.
 func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) {
-	if !ktdm.provider.IsServiceAccountKey() {
-		return nil, fmt.Errorf("The current provider does not have a service account key set.")
-	}
-
 	// Determine if there is autoscaling node pools
 	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return nil, err
 	}
 
-	var autoScalingNodePool provider.NodePool = nil
+	var autoScalingNodePool cp.NodePool = nil
 	for _, np := range nodePools {
 		if np.AutoScaling() {
 			autoScalingNodePool = np

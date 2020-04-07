@@ -44,10 +44,6 @@ func (mts *StandardTurndownStrategy) TaintKey() string {
 // This method will locate or create a node, apply a specific taint and
 // label, and return the updated kubernetes Node instance.
 func (ktdm *StandardTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) {
-	if !ktdm.provider.IsServiceAccountKey() {
-		return nil, fmt.Errorf("The current provider does not have a service account key set.")
-	}
-
 	// Locate the master node using role labels
 	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
 		LabelSelector: MasterNodeLabelKey,

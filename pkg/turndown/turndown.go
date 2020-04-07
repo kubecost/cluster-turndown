@@ -5,6 +5,7 @@ import (
 
 	"github.com/kubecost/cluster-turndown/pkg/cluster"
 	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
+	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
@@ -53,7 +54,7 @@ type KubernetesTurndownManager struct {
 	strategy    strategy.TurndownStrategy
 	currentNode string
 	autoScaling *bool
-	nodePools   []provider.NodePool
+	nodePools   []cp.NodePool
 	log         logging.NamedLogger
 }
 
@@ -158,7 +159,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// 2. Use provider to get all node pools used for this cluster, determine
 	// whether or not there exists autoscaling node pools
 	var isAutoScalingCluster bool = false
-	pools := make(map[string]provider.NodePool)
+	pools := make(map[string]cp.NodePool)
 	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
@@ -220,7 +221,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	}
 
 	// 4. Filter out the current node pool holding the current node and/or autoscaling
-	targetPools := []provider.NodePool{}
+	targetPools := []cp.NodePool{}
 	for _, np := range nodePools {
 		if np.Name() == currentNodePoolID || np.AutoScaling() {
 			continue
@@ -251,7 +252,7 @@ func (ktdm *KubernetesTurndownManager) loadNodePools() error {
 		return err
 	}
 
-	var nodePools []provider.NodePool
+	var nodePools []cp.NodePool
 	for _, pool := range pools {
 		autoscaling := pool.AutoScaling()
 

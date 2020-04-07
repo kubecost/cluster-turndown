@@ -106,29 +106,48 @@ func (np *GKENodePool) IsMaster() bool          { return false }
 //--------------------------------------------------------------------------
 
 // ClusterProvider implementation for GKE
-type GKEProvider struct {
+type GKEClusterProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *gke.ClusterManagerClient
 	metadata       *GKEMetaData
 	log            logging.NamedLogger
 }
 
-// NewGKEProvider creates a new GKEProvider instance as the ClusterProvider
-func NewGKEProvider(kubernetes kubernetes.Interface) ClusterProvider {
+// NewGKEClusterProvider creates a new GKEClusterProvider instance as the ClusterProvider
+func NewGKEClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
 	clusterManager, err := newGKEClusterManager()
 	if err != nil {
 		klog.V(1).Infof("Failed to load service account.")
 	}
 
-	return &GKEProvider{
+	return &GKEClusterProvider{
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
 		metadata:       NewGKEMetaData(),
-		log:            logging.NamedLogger("GKEProvider"),
+		log:            logging.NamedLogger("GKEClusterProvider"),
 	}
 }
 
-func (p *GKEProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
+// IsNodePool determines if there is a node pool with the name or not.
+func (p *GKEClusterProvider) IsNodePool(name string) bool {
+	req := &container.GetNodePoolRequest{Name: p.toNodePoolResourceByName(name)}
+	resp, err := p.clusterManager.GetNodePool(context.TODO(), req)
+	if err != nil {
+		return false
+	}
+
+	return resp != nil
+}
+
+// GetNodePoolName returns the name of a NodePool for a specific kubernetes node.
+func (p *GKEClusterProvider) GetNodePoolName(node *v1.Node) string {
+	_, _, pool := p.projectInfoFor(node)
+	return pool
+}
+
+// GetNodesFor returns a slice of kubernetes Node instances for the NodePool instance
+// provided.
+func (p *GKEClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 	name := np.Name()
 
 	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -149,8 +168,8 @@ func (p *GKEProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 	return nodes, nil
 }
 
-// GetNodePools returns all of the node pools for the cluster provider.
-func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
+// GetNodePools loads all of the provider NodePools in a cluster and returns them.
+func (p *GKEClusterProvider) GetNodePools() ([]NodePool, error) {
 	ctx := context.TODO()
 
 	projectID := p.metadata.GetProjectID()
@@ -200,7 +219,8 @@ func (p *GKEProvider) GetNodePools() ([]NodePool, error) {
 	return pools, nil
 }
 
-func (p *GKEProvider) CreateNodePool(c context.Context, name, machineType string, nodeCount int32, diskType string, diskSizeGB int32, labels map[string]string) error {
+// CreateNodePool creates a new node pool with the provided specs.
+func (p *GKEClusterProvider) CreateNodePool(c context.Context, name, machineType string, nodeCount int32, diskType string, diskSizeGB int32, labels map[string]string) error {
 	// Fix any optional empty parameters
 	if diskType == "" {
 		diskType = GKEDefaultDiskType
@@ -258,7 +278,8 @@ func (p *GKEProvider) CreateNodePool(c context.Context, name, machineType string
 	return helper.WaitUntilNodesCreated(p.kubernetes, LabelGKENodePool, name, int(nodeCount), 5*time.Second, 20*time.Minute)
 }
 
-func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error {
+// CreateAutoScalingNodePool creates a new autoscaling node pool. The semantics behind autoscaling depend on the provider.
+func (p *GKEClusterProvider) CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error {
 	// Fix any optional empty parameters
 	if diskType == "" {
 		diskType = GKEDefaultDiskType
@@ -322,7 +343,8 @@ func (p *GKEProvider) CreateAutoScalingNodePool(c context.Context, name, machine
 	return helper.WaitUntilNodesCreated(p.kubernetes, LabelGKENodePool, name, 1, 5*time.Second, 20*time.Minute)
 }
 
-func (p *GKEProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
+// UpdateNodePoolSize updates the number of nodes in a NodePool
+func (p *GKEClusterProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
 	if nodePool == nil {
 		return fmt.Errorf("Provided nodePool was nil.")
 	}
@@ -358,7 +380,8 @@ func (p *GKEProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, s
 	}
 }
 
-func (p *GKEProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePool, size int32) error {
+// UpdateNodePoolSizes updates the number of nodes in multiple NodePool instances.
+func (p *GKEClusterProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePool, size int32) error {
 	if len(nodePools) == 0 {
 		return nil
 	}
@@ -386,7 +409,8 @@ func (p *GKEProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePoo
 	}
 }
 
-func (p *GKEProvider) DeleteNodePool(c context.Context, nodePool NodePool) error {
+// DeleteNodePool deletes the NodePool.
+func (p *GKEClusterProvider) DeleteNodePool(c context.Context, nodePool NodePool) error {
 	if nodePool == nil {
 		return fmt.Errorf("Provided nodePool was nil.")
 	}
@@ -421,7 +445,25 @@ func (p *GKEProvider) DeleteNodePool(c context.Context, nodePool NodePool) error
 	}
 }
 
-func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string, nodePool string) {
+// CreateOrUpdateTags creates or updates the tags for NodePool instances.
+func (p *GKEClusterProvider) CreateOrUpdateTags(c context.Context, nodePool NodePool, updateNodes bool, tags map[string]string) error {
+	// NOTE: In GKE, it's not possible to update the node pool labels. This is because it propagates the labels
+	// NOTE: via kubelet, which are set at creation. We could update all of the nodes, but that doesn't seem
+	// NOTE: quite right, as any new nodes will not include the labels. Depending on how important this
+	// NOTE: specific functionality is, we may have to recreate a NodePool, which currently seems very wasteful.
+	return fmt.Errorf("GKE does not support modifying labels after a node pool has been created.")
+}
+
+// DeleteTags deletes the tags by key on a NodePool instance.
+func (p *GKEClusterProvider) DeleteTags(c context.Context, nodePool NodePool, keys []string) error {
+	// NOTE: In GKE, it's not possible to update the node pool labels. This is because it propagates the labels
+	// NOTE: via kubelet, which are set at creation. We could update all of the nodes, but that doesn't seem
+	// NOTE: quite right, as any new nodes will not include the labels. Depending on how important this
+	// NOTE: specific functionality is, we may have to recreate a NodePool, which currently seems very wasteful.
+	return fmt.Errorf("GKE does not support modifying labels after a node pool has been created.")
+}
+
+func (p *GKEClusterProvider) projectInfoFor(node *v1.Node) (project string, zone string, nodePool string) {
 	nodeProviderID := node.Spec.ProviderID[6:]
 	props := strings.Split(nodeProviderID, "/")
 
@@ -439,13 +481,22 @@ func (p *GKEProvider) projectInfoFor(node *v1.Node) (project string, zone string
 }
 
 // gets the fully qualified resource path for the node pool
-func (p *GKEProvider) toNodePoolResource(nodePool NodePool) string {
+func (p *GKEClusterProvider) toNodePoolResourceByName(name string) string {
+	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
+		p.metadata.GetProjectID(),
+		p.metadata.GetMasterZone(),
+		p.metadata.GetClusterID(),
+		name)
+}
+
+// gets the fully qualified resource path for the node pool
+func (p *GKEClusterProvider) toNodePoolResource(nodePool NodePool) string {
 	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s/nodePools/%s",
 		nodePool.Project(), nodePool.Zone(), nodePool.ClusterID(), nodePool.Name())
 }
 
 // gets the fully qualified resource path for the cluster
-func (p *GKEProvider) getClusterResourcePath() string {
+func (p *GKEClusterProvider) getClusterResourcePath() string {
 	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s",
 		p.metadata.GetProjectID(), p.metadata.GetMasterZone(), p.metadata.GetClusterID())
 }

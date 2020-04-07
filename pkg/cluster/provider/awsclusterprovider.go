@@ -384,7 +384,7 @@ func (p *AWSClusterData) getClusterName() string {
 //--------------------------------------------------------------------------
 
 // ClusterProvider for AWS
-type AWSProvider struct {
+type AWSClusterProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *autoscaling.AutoScaling
 	ec2Client      *ec2.EC2
@@ -393,8 +393,8 @@ type AWSProvider struct {
 	log            logging.NamedLogger
 }
 
-// NewAWSProvider creates a new AWSProvider instance as the ClusterProvider
-func NewAWSProvider(kubernetes kubernetes.Interface) ClusterProvider {
+// NewAWSClusterProvider creates a new AWSClusterProvider instance as the ClusterProvider
+func NewAWSClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
 	region := findAWSRegion(kubernetes)
 	clusterManager, ec2Client, s3Client, err := newAWSClusterManager(region)
 	if err != nil {
@@ -402,17 +402,49 @@ func NewAWSProvider(kubernetes kubernetes.Interface) ClusterProvider {
 		return nil
 	}
 
-	return &AWSProvider{
+	return &AWSClusterProvider{
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
 		ec2Client:      ec2Client,
 		s3Client:       s3Client,
 		clusterData:    newAWSClusterData(),
-		log:            logging.NamedLogger("AWSProvider"),
+		log:            logging.NamedLogger("AWSClusterProvider"),
 	}
 }
 
-func (p *AWSProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
+// IsNodePool determines if there is a node pool with the name or not.
+func (p *AWSClusterProvider) IsNodePool(name string) bool {
+	res, err := p.clusterManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []*string{aws.String(name)},
+	})
+	if err != nil {
+		return false
+	}
+
+	return len(res.AutoScalingGroups) > 0
+}
+
+// GetNodePoolName returns the name of a NodePool for a specific kubernetes node.
+func (p *AWSClusterProvider) GetNodePoolName(node *v1.Node) string {
+	_, instanceID := p.instanceInfoFor(node)
+	res, err := p.clusterManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{})
+	if err != nil {
+		return ""
+	}
+
+	for _, asg := range res.AutoScalingGroups {
+		for _, instance := range asg.Instances {
+			if strings.EqualFold(aws.StringValue(instance.InstanceId), instanceID) {
+				return aws.StringValue(asg.AutoScalingGroupName)
+			}
+		}
+	}
+
+	return ""
+}
+
+// GetNodePools loads all of the provider NodePools in a cluster and returns them.
+func (p *AWSClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 	awsNodeGroup, ok := np.(*AWSNodePool)
 	if !ok {
 		return nil, fmt.Errorf("NodePool is not from AWS")
@@ -444,7 +476,7 @@ func (p *AWSProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 // GetNodePools for AWS needs to do a bit more work to acquire a list of "correct" node pools. Since
 // the asusmption is that we're working with kops, a specific region could have many autoscaling groups,
 // so we'll need to refine the list down to the groups associated with kubernetes nodes.
-func (p *AWSProvider) GetNodePools() ([]NodePool, error) {
+func (p *AWSClusterProvider) GetNodePools() ([]NodePool, error) {
 	nodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -521,7 +553,7 @@ func (p *AWSProvider) GetNodePools() ([]NodePool, error) {
 		lcName := aws.StringValue(lc.LaunchConfigurationName)
 		launchConfigs[lcName] = lc
 
-		// Use a non-master LC for template
+		// TODO: We probably need something more robust here.
 		if strings.Contains(lcName, "master") {
 			continue
 		}
@@ -591,7 +623,7 @@ func (p *AWSProvider) GetNodePools() ([]NodePool, error) {
 }
 
 // Creates a new NodePool for a specific parameter list using a kops driven bootstrap.
-func (p *AWSProvider) CreateNodePool(c context.Context, name, machineType string, nodeCount int32, diskType string, diskSizeGB int32, labels map[string]string) error {
+func (p *AWSClusterProvider) CreateNodePool(c context.Context, name, machineType string, nodeCount int32, diskType string, diskSizeGB int32, labels map[string]string) error {
 	// Fix any optional empty parameters
 	if diskType == "" {
 		diskType = AWSDefaultDiskType
@@ -652,13 +684,13 @@ func (p *AWSProvider) CreateNodePool(c context.Context, name, machineType string
 	return helper.WaitUntilNodesCreated(p.kubernetes, KopsInstanceGroupTag, name, int(nodeCount), 5*time.Second, 5*time.Minute)
 }
 
-func (p *AWSProvider) CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error {
+// CreateAutoScalingNodePool creates a new autoscaling node pool. The semantics behind autoscaling depend on the provider.
+func (p *AWSClusterProvider) CreateAutoScalingNodePool(c context.Context, name, machineType string, minNodes, nodeCount, maxNodes int32, diskType string, diskSizeGB int32, labels map[string]string) error {
 	return fmt.Errorf("CreateAutoScalingNodePool is not yet supported in AWS!")
 }
 
 // Updates a node pool size to the size parameter.
-func (p *AWSProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
-	min, max, count := nodePool.MinNodes(), nodePool.MaxNodes(), nodePool.NodeCount()
+func (p *AWSClusterProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
 	sz := int64(size)
 
 	update := &autoscaling.UpdateAutoScalingGroupInput{
@@ -674,33 +706,11 @@ func (p *AWSProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, s
 		return err
 	}
 
-	nodeRange := flatRange(min, max, count)
-	tagsIn := &autoscaling.CreateOrUpdateTagsInput{
-		Tags: []*autoscaling.Tag{
-			&autoscaling.Tag{
-				ResourceId:        aws.String(nodePool.Name()),
-				ResourceType:      aws.String(AutoScalingGroupResourceType),
-				Key:               aws.String(AWSNodeGroupPreviousKey),
-				Value:             nodeRange,
-				PropagateAtLaunch: aws.Bool(false),
-			},
-		},
-	}
-
-	_, err = p.clusterManager.CreateOrUpdateTagsWithContext(c, tagsIn)
-	if err != nil {
-		p.log.Err("Creating or Updating Tags: %s", err.Error())
-
-		return err
-	}
-
-	nodePool.Tags()[AWSNodeGroupPreviousKey] = aws.StringValue(nodeRange)
-
 	return nil
 }
 
 // Updates the node pool sizes for all the provided node pools to the size parameter.
-func (p *AWSProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePool, size int32) error {
+func (p *AWSClusterProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePool, size int32) error {
 	if len(nodePools) == 0 {
 		return nil
 	}
@@ -718,91 +728,127 @@ func (p *AWSProvider) UpdateNodePoolSizes(c context.Context, nodePools []NodePoo
 	return nil
 }
 
-func (p *AWSProvider) DeleteNodePool(c context.Context, nodePool NodePool) error {
-	return nil
-}
+func (p *AWSClusterProvider) DeleteNodePool(c context.Context, nodePool NodePool) error {
+	tags := nodePool.Tags()
 
-func (p *AWSProvider) GetPoolID(node *v1.Node) string {
-	_, instanceID := p.instanceInfoFor(node)
-	res, err := p.clusterManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{})
+	instanceGroup, ok := tags[KopsInstanceGroupTag]
+	if !ok {
+		return fmt.Errorf("Failed to locate the instance group from AutoScalingGroup tags")
+	}
+
+	clusterName, ok := tags[KopsClusterTag]
+	if !ok {
+		clusterName = p.clusterData.getClusterName()
+	}
+	if clusterName == "" {
+		return fmt.Errorf("Failed to locate the cluster name from AutoScalingGroup tags")
+	}
+
+	clusterBucket := p.clusterData.getClusterBucket()
+	if clusterBucket == "" {
+		return fmt.Errorf("Failed to locate the cluster bucket from user data.")
+	}
+
+	awsNodePool, ok := nodePool.(*AWSNodePool)
+	if !ok {
+		return fmt.Errorf("NodePool is not implemented by AWSNodePool.")
+	}
+
+	if awsNodePool.lc == nil {
+		return fmt.Errorf("NodePool has no reference to a launch configuration.")
+	}
+
+	launchConfigName := awsNodePool.lc.LaunchConfigurationName
+
+	// Delete AutoscalingGroup
+	_, err := p.clusterManager.DeleteAutoScalingGroup(&autoscaling.DeleteAutoScalingGroupInput{
+		AutoScalingGroupName: aws.String(nodePool.Name()),
+		ForceDelete:          aws.Bool(true),
+	})
 	if err != nil {
-		return ""
+		return err
 	}
 
-	for _, asg := range res.AutoScalingGroups {
-		for _, instance := range asg.Instances {
-			if aws.StringValue(instance.InstanceId) == instanceID {
-				return aws.StringValue(asg.AutoScalingGroupName)
-			}
-		}
+	// Delete Launch Configuration
+	_, err = p.clusterManager.DeleteLaunchConfiguration(&autoscaling.DeleteLaunchConfigurationInput{
+		LaunchConfigurationName: launchConfigName,
+	})
+	if err != nil {
+		return err
 	}
 
-	return ""
-}
-
-func (p *AWSProvider) ResetNodePoolSizes(nodePools []NodePool) error {
-	if len(nodePools) == 0 {
-		return nil
-	}
-
-	for _, np := range nodePools {
-		tags := np.Tags()
-		rangeTag, ok := tags[AWSNodeGroupPreviousKey]
-		if !ok {
-			p.log.Err("Failed to locate tag: %s for NodePool: %s", AWSNodeGroupPreviousKey, np.Name())
-			continue
-		}
-
-		min, max, count := expandRange(rangeTag)
-		if count < 0 {
-			p.log.Err("Failed to parse range used to resize node pool.")
-			continue
-		}
-
-		update := &autoscaling.UpdateAutoScalingGroupInput{
-			AutoScalingGroupName: aws.String(np.Name()),
-			MinSize:              aws.Int64(min),
-			MaxSize:              aws.Int64(max),
-			DesiredCapacity:      aws.Int64(count),
-		}
-
-		_, err := p.clusterManager.UpdateAutoScalingGroup(update)
-		if err != nil {
-			p.log.Err("Updating AutoScalingGroup: %s", err.Error())
-			return err
-		}
-
-		deleteTagsIn := &autoscaling.DeleteTagsInput{
-			Tags: []*autoscaling.Tag{
-				&autoscaling.Tag{
-					ResourceId:   aws.String(np.Name()),
-					ResourceType: aws.String(AutoScalingGroupResourceType),
-					Key:          aws.String(AWSNodeGroupPreviousKey),
-				},
-			},
-		}
-
-		_, err = p.clusterManager.DeleteTags(deleteTagsIn)
-		if err != nil {
-			p.log.Err("Deleting Tags: %s", err.Error())
-
-			return err
-		}
-
-		delete(tags, AWSNodeGroupPreviousKey)
+	// Delete S3 GroupInstance
+	err = p.deleteInstanceGroup(clusterBucket, clusterName, instanceGroup)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (p *AWSProvider) isLaunchConfiguration(fullyQualifiedName string) bool {
+// CreateOrUpdateTags creates or updates the tags for NodePool instances.
+func (p *AWSClusterProvider) CreateOrUpdateTags(c context.Context, nodePool NodePool, updateNodes bool, tags map[string]string) error {
+	ts := make([]*autoscaling.Tag, len(tags))
+	index := 0
+	for k, v := range tags {
+		ts[index] = &autoscaling.Tag{
+			ResourceId:        aws.String(nodePool.Name()),
+			ResourceType:      aws.String(AutoScalingGroupResourceType),
+			Key:               aws.String(k),
+			Value:             aws.String(v),
+			PropagateAtLaunch: aws.Bool(updateNodes),
+		}
+	}
+
+	_, err := p.clusterManager.CreateOrUpdateTagsWithContext(c, &autoscaling.CreateOrUpdateTagsInput{
+		Tags: ts,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Update NodePool instance
+	for k, v := range tags {
+		nodePool.Tags()[k] = v
+	}
+
+	return nil
+}
+
+// DeleteTags deletes the tags by key on a NodePool instance.
+func (p *AWSClusterProvider) DeleteTags(c context.Context, nodePool NodePool, keys []string) error {
+	tags := make([]*autoscaling.Tag, len(keys))
+	for index, key := range keys {
+		tags[index] = &autoscaling.Tag{
+			ResourceId:   aws.String(nodePool.Name()),
+			ResourceType: aws.String(AutoScalingGroupResourceType),
+			Key:          aws.String(key),
+		}
+	}
+
+	_, err := p.clusterManager.DeleteTagsWithContext(c, &autoscaling.DeleteTagsInput{
+		Tags: tags,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Update tags on node pool instance
+	for _, key := range keys {
+		delete(nodePool.Tags(), key)
+	}
+
+	return nil
+}
+
+func (p *AWSClusterProvider) isLaunchConfiguration(fullyQualifiedName string) bool {
 	lcs, err := p.clusterManager.DescribeLaunchConfigurations(&autoscaling.DescribeLaunchConfigurationsInput{
 		LaunchConfigurationNames: aws.StringSlice([]string{fullyQualifiedName}),
 	})
 	return err == nil && len(lcs.LaunchConfigurations) > 0
 }
 
-func (p *AWSProvider) createLaunchConfiguration(name, machineType string, nodeCount int32, diskType string, diskSizeGB int32) (*autoscaling.LaunchConfiguration, error) {
+func (p *AWSClusterProvider) createLaunchConfiguration(name, machineType string, nodeCount int32, diskType string, diskSizeGB int32) (*autoscaling.LaunchConfiguration, error) {
 	clusterData := p.clusterData
 
 	encoded := clusterData.getUserData(name)
@@ -895,7 +941,7 @@ func (p *AWSProvider) createLaunchConfiguration(name, machineType string, nodeCo
 
 // Uploads the InstanceGroup yaml to S3 using the bucket and cluster name located in the launch
 // configurations user data.
-func (p *AWSProvider) uploadInstanceGroup(yaml string, clusterBucket string, clusterName string, groupName string) error {
+func (p *AWSClusterProvider) uploadInstanceGroup(yaml string, clusterBucket string, clusterName string, groupName string) error {
 	buffer := []byte(yaml)
 	key := fmt.Sprintf("/%s/instancegroup/%s", clusterName, groupName)
 
@@ -914,8 +960,22 @@ func (p *AWSProvider) uploadInstanceGroup(yaml string, clusterBucket string, clu
 	return err
 }
 
+// Uploads the InstanceGroup yaml to S3 using the bucket and cluster name located in the launch
+// configurations user data.
+func (p *AWSClusterProvider) deleteInstanceGroup(clusterBucket string, clusterName string, groupName string) error {
+	key := fmt.Sprintf("/%s/instancegroup/%s", clusterName, groupName)
+
+	// Delete the S3 object for instance group
+	_, err := p.s3Client.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(clusterBucket),
+		Key:    aws.String(key),
+	})
+
+	return err
+}
+
 // gets the image location for the AMI id
-func (p *AWSProvider) imageLocationFor(imageID *string) *string {
+func (p *AWSClusterProvider) imageLocationFor(imageID *string) *string {
 	di, err := p.ec2Client.DescribeImages(&ec2.DescribeImagesInput{
 		ImageIds: []*string{imageID},
 	})
@@ -935,7 +995,7 @@ func (p *AWSProvider) imageLocationFor(imageID *string) *string {
 }
 
 // Pulls the instance id and zone from the Node.Spec.ProviderID
-func (p *AWSProvider) instanceInfoFor(node *v1.Node) (zone string, instanceID string) {
+func (p *AWSClusterProvider) instanceInfoFor(node *v1.Node) (zone string, instanceID string) {
 	id := node.Spec.ProviderID
 
 	splitted := strings.Split(id[7:], "/")
@@ -1015,7 +1075,7 @@ func flatRange(min, max, count int32) *string {
 }
 
 func expandRange(s string) (int64, int64, int64) {
-	log := logging.NamedLogger("AWSProvider")
+	log := logging.NamedLogger("AWSClusterProvider")
 	values := strings.Split(s, "/")
 
 	count, err := strconv.Atoi(values[2])
@@ -1041,7 +1101,7 @@ func expandRange(s string) (int64, int64, int64) {
 
 func findAWSRegion(c kubernetes.Interface) string {
 	// Locate AWS region -- TODO: Use metadata?
-	log := logging.NamedLogger("AWSProvider")
+	log := logging.NamedLogger("AWSClusterProvider")
 	nodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		log.Err("Failed to locate AWS Region: %s", err.Error())

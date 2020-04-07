@@ -9,6 +9,8 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 
+	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -33,30 +35,13 @@ func (t UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error)
 
 // ComputeProvider contains methods used to manage turndown
 type ComputeProvider interface {
-	IsServiceAccountKey() bool
 	IsTurndownNodePool() bool
 	CreateSingletonNodePool() error
-	GetNodePools() ([]NodePool, error)
+	GetNodePools() ([]cp.NodePool, error)
 	GetPoolID(node *v1.Node) string
-	SetNodePoolSizes(nodePools []NodePool, size int32) error
-	ResetNodePoolSizes(nodePools []NodePool) error
+	SetNodePoolSizes(nodePools []cp.NodePool, size int32) error
+	ResetNodePoolSizes(nodePools []cp.NodePool) error
 }
-
-// NodePool contains a node pool identifier and the initial number of nodes
-// in the pool
-type NodePool interface {
-	Name() string
-	Project() string
-	Zone() string
-	ClusterID() string
-	MinNodes() int32
-	MaxNodes() int32
-	NodeCount() int32
-	AutoScaling() bool
-	Tags() map[string]string
-}
-
-var _ = klog.V(1)
 
 func NewProvider(client kubernetes.Interface) (ComputeProvider, error) {
 	if metadata.OnGCE() {
