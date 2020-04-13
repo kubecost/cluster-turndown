@@ -76,8 +76,13 @@ func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
 		return nil, err
 	}
 
-	provider := strings.ToLower(nodes.Items[0].Spec.ProviderID)
+	node := nodes.Items[0]
+	provider := strings.ToLower(node.Spec.ProviderID)
 	if strings.HasPrefix(provider, "aws") {
+		if _, ok := node.Labels["eks.amazonaws.com/nodegroup"]; ok {
+			klog.V(2).Info("Found ProviderID starting with \"aws\" and eks nodegroup, using EKS Provider")
+			return NewEKSClusterProvider(client), nil
+		}
 		klog.V(2).Info("Found ProviderID starting with \"aws\", using AWS Provider")
 		return NewAWSClusterProvider(client), nil
 	} else if strings.HasPrefix(provider, "azure") {

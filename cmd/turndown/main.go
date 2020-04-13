@@ -94,6 +94,8 @@ func strategyForProvider(c kubernetes.Interface, p provider.ComputeProvider) (st
 	switch v := p.(type) {
 	case *provider.GKEProvider:
 		return strategy.NewMasterlessTurndownStrategy(c, p), nil
+	case *provider.EKSProvider:
+		return strategy.NewMasterlessTurndownStrategy(c, p), nil
 	case *provider.AWSProvider:
 		return strategy.NewStandardTurndownStrategy(c, p), nil
 	default:

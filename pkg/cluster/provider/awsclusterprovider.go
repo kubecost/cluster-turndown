@@ -98,7 +98,7 @@ func (np *AWSNodePool) IsMaster() bool          { _, ok := np.tags["k8s.io/role/
 //--------------------------------------------------------------------------
 
 // Access
-type awsAccessKey struct {
+type AWSAccessKeyFile struct {
 	AccessKeyID     string `json:"aws_access_key_id"`
 	SecretAccessKey string `json:"aws_secret_access_key"`
 }
@@ -1012,7 +1012,7 @@ func newAWSClusterManager(region string) (*autoscaling.AutoScaling, *ec2.EC2, *s
 		return nil, nil, nil, err
 	}
 
-	var ak awsAccessKey
+	var ak AWSAccessKeyFile
 	err = json.Unmarshal(result, &ak)
 	if err != nil {
 		return nil, nil, nil, err
