@@ -434,6 +434,14 @@ func (p *EKSClusterProvider) DeleteTags(c context.Context, nodePool NodePool, ke
 		return fmt.Errorf("NodePool provided was not from EKS.")
 	}
 
+	// Default underlying labels and tags if nil
+	if eksNodePool.ng.Labels == nil {
+		eksNodePool.ng.Labels = make(map[string]*string)
+	}
+	if eksNodePool.ng.Tags == nil {
+		eksNodePool.ng.Tags = make(map[string]*string)
+	}
+
 	labels := eksNodePool.ng.Labels
 	tags := eksNodePool.ng.Tags
 
@@ -475,6 +483,8 @@ func (p *EKSClusterProvider) DeleteTags(c context.Context, nodePool NodePool, ke
 
 	for _, k := range keys {
 		delete(nodePool.Tags(), k)
+		delete(eksNodePool.ng.Labels, k)
+		delete(eksNodePool.ng.Tags, k)
 	}
 
 	return nil
