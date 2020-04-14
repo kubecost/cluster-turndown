@@ -288,6 +288,31 @@ func (p *EKSClusterProvider) CreateAutoScalingNodePool(c context.Context, name, 
 
 // UpdateNodePoolSize updates the number of nodes in a NodePool
 func (p *EKSClusterProvider) UpdateNodePoolSize(c context.Context, nodePool NodePool, size int32) error {
+	// NOTE: NodeGroups on EKS have a hard size limit of 1, even though AutoScalingGroups allow size: 0.
+	// NOTE: To work-around this, we can just update the autoscaling group and the nodegroup parameters will
+	// NOTE: automatically adjust.
+	if size == 0 {
+		eksNodePool, ok := nodePool.(*EKSNodePool)
+		if !ok {
+			return fmt.Errorf("Failed to update node pool size. NodePool was not an EKSNodePool.")
+		}
+
+		asgName := aws.StringValue(eksNodePool.asg.AutoScalingGroupName)
+
+		_, err := p.asgManager.UpdateAutoScalingGroupWithContext(c, &autoscaling.UpdateAutoScalingGroupInput{
+			AutoScalingGroupName: aws.String(asgName),
+			DesiredCapacity:      aws.Int64(int64(size)),
+			MinSize:              aws.Int64(int64(size)),
+			MaxSize:              aws.Int64(int64(size)),
+		})
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// Any other sizes other than 0 can be made directly with the EKS API
 	resp, err := p.clusterManager.UpdateNodegroupConfigWithContext(c, &eks.UpdateNodegroupConfigInput{
 		ClusterName:   aws.String(nodePool.ClusterID()),
 		NodegroupName: aws.String(nodePool.Name()),
@@ -354,6 +379,19 @@ func (p *EKSClusterProvider) DeleteNodePool(c context.Context, nodePool NodePool
 
 // CreateOrUpdateTags creates or updates the tags for NodePool instances.
 func (p *EKSClusterProvider) CreateOrUpdateTags(c context.Context, nodePool NodePool, updateNodes bool, tags map[string]string) error {
+	eksNodePool, ok := nodePool.(*EKSNodePool)
+	if !ok {
+		return fmt.Errorf("NodePool provided was not from EKS.")
+	}
+
+	// Default underlying labels and tags if nil
+	if eksNodePool.ng.Labels == nil {
+		eksNodePool.ng.Labels = make(map[string]*string)
+	}
+	if eksNodePool.ng.Tags == nil {
+		eksNodePool.ng.Tags = make(map[string]*string)
+	}
+
 	// For Updating Node Labels, we just update the nodegroup config labels
 	if updateNodes {
 		_, err := p.clusterManager.UpdateNodegroupConfigWithContext(c, &eks.UpdateNodegroupConfigInput{
@@ -363,12 +401,12 @@ func (p *EKSClusterProvider) CreateOrUpdateTags(c context.Context, nodePool Node
 			},
 		})
 
-		return err
-	}
+		for k, v := range tags {
+			eksNodePool.ng.Labels[k] = aws.String(v)
+			nodePool.Tags()[k] = v
+		}
 
-	eksNodePool, ok := nodePool.(*EKSNodePool)
-	if !ok {
-		return fmt.Errorf("NodePool provided was not from EKS.")
+		return err
 	}
 
 	// For updating the tags, we apply the tags directly to the resource
@@ -382,6 +420,7 @@ func (p *EKSClusterProvider) CreateOrUpdateTags(c context.Context, nodePool Node
 	}
 
 	for k, v := range tags {
+		eksNodePool.ng.Tags[k] = aws.String(v)
 		nodePool.Tags()[k] = v
 	}
 
@@ -470,6 +509,7 @@ func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, er
 	return clusterManager, asgManager, nil
 }
 
+// initClusterData looks up specific cluster data for use with all EKS APIs.
 func (p *EKSClusterProvider) initClusterData() error {
 	currentNodeName := os.Getenv("NODE_NAME")
 	if currentNodeName == "" {
@@ -500,7 +540,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 			NodegroupName: aws.String(nodePoolName),
 		})
 		if err != nil || nodeGroupResp.Nodegroup == nil {
-			klog.Infof("Could not find NodeGroup: %s in Cluster: %s", nodePoolName, clusterName)
+			klog.Infof("Could not find NodeGroup: %s in Cluster: %s", nodePoolName, cName)
 			continue
 		}
 
