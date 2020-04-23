@@ -25,10 +25,10 @@ type GKEProvider struct {
 	log             logging.NamedLogger
 }
 
-func NewGKEProvider(kubernetes kubernetes.Interface) ComputeProvider {
+func NewGKEProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
 	return &GKEProvider{
 		kubernetes:      kubernetes,
-		clusterProvider: cp.NewGKEClusterProvider(kubernetes),
+		clusterProvider: clusterProvider,
 		metadata:        cp.NewGKEMetaData(),
 		log:             logging.NamedLogger("GKEProvider"),
 	}

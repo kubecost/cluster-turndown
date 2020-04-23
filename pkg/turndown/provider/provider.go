@@ -2,10 +2,8 @@ package provider
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/compute/metadata"
 
@@ -14,7 +12,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 )
@@ -33,8 +30,8 @@ func (t UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.base.RoundTrip(req)
 }
 
-// ComputeProvider contains methods used to manage turndown
-type ComputeProvider interface {
+// TurndownProvider contains methods used to manage turndown
+type TurndownProvider interface {
 	IsTurndownNodePool() bool
 	CreateSingletonNodePool() error
 	GetNodePools() ([]cp.NodePool, error)
@@ -43,9 +40,9 @@ type ComputeProvider interface {
 	ResetNodePoolSizes(nodePools []cp.NodePool) error
 }
 
-func NewProvider(client kubernetes.Interface) (ComputeProvider, error) {
+func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.ClusterProvider) (TurndownProvider, error) {
 	if metadata.OnGCE() {
-		return NewGKEProvider(client), nil
+		return NewGKEProvider(client, clusterProvider), nil
 	}
 
 	nodes, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -58,10 +55,10 @@ func NewProvider(client kubernetes.Interface) (ComputeProvider, error) {
 	if strings.HasPrefix(provider, "aws") {
 		if _, ok := node.Labels["eks.amazonaws.com/nodegroup"]; ok {
 			klog.V(2).Info("Found ProviderID starting with \"aws\" and eks nodegroup, using EKS Provider")
-			return NewEKSProvider(client), nil
+			return NewEKSProvider(client, clusterProvider), nil
 		}
 		klog.V(2).Info("Found ProviderID starting with \"aws\", using AWS Provider")
-		return NewAWSProvider(client), nil
+		return NewAWSProvider(client, clusterProvider), nil
 	} else if strings.HasPrefix(provider, "azure") {
 		klog.V(2).Info("Found ProviderID starting with \"azure\", using Azure Provider")
 		return nil, errors.New("Azure Not Supported")
@@ -69,18 +66,4 @@ func NewProvider(client kubernetes.Interface) (ComputeProvider, error) {
 		klog.V(2).Info("Unsupported provider, falling back to default")
 		return nil, errors.New("Custom Not Supported")
 	}
-}
-
-func WaitUntilNodeCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelValue, nodePoolName string, interval, timeout time.Duration) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		nodeList, err := client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", nodeLabelKey, nodeLabelValue),
-		})
-		for _, node := range nodeList.Items {
-			if strings.Contains(node.Name, nodePoolName) {
-				return true, nil
-			}
-		}
-		return false, err
-	})
 }

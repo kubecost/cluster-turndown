@@ -26,10 +26,10 @@ type EKSProvider struct {
 	log             logging.NamedLogger
 }
 
-func NewEKSProvider(kubernetes kubernetes.Interface) ComputeProvider {
+func NewEKSProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
 	return &EKSProvider{
 		kubernetes:      kubernetes,
-		clusterProvider: cp.NewEKSClusterProvider(kubernetes),
+		clusterProvider: clusterProvider,
 		log:             logging.NamedLogger("EKSProvider"),
 	}
 }

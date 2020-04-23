@@ -50,8 +50,7 @@ type ClusterProvider interface {
 	DeleteTags(c context.Context, nodePool NodePool, keys []string) error
 }
 
-// NodePool contains a node pool identifier and the initial number of nodes
-// in the pool
+// NodePool is an implementation prototype that represents a collection of nodes.
 type NodePool interface {
 	Name() string
 	Project() string
@@ -66,6 +65,8 @@ type NodePool interface {
 	IsMaster() bool
 }
 
+// NewClusterProvider is a ClusterProvider factory method that uses the kubernetes client to
+// determine the provider and create the correct implementation.
 func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
 	if metadata.OnGCE() {
 		return NewGKEClusterProvider(client), nil

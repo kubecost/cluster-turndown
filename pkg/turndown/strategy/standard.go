@@ -22,10 +22,10 @@ const (
 
 type StandardTurndownStrategy struct {
 	client   kubernetes.Interface
-	provider provider.ComputeProvider
+	provider provider.TurndownProvider
 }
 
-func NewStandardTurndownStrategy(client kubernetes.Interface, provider provider.ComputeProvider) TurndownStrategy {
+func NewStandardTurndownStrategy(client kubernetes.Interface, provider provider.TurndownProvider) TurndownStrategy {
 	return &StandardTurndownStrategy{
 		client:   client,
 		provider: provider,

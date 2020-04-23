@@ -50,7 +50,7 @@ type TurndownManager interface {
 
 type KubernetesTurndownManager struct {
 	client      kubernetes.Interface
-	provider    provider.ComputeProvider
+	provider    provider.TurndownProvider
 	strategy    strategy.TurndownStrategy
 	currentNode string
 	autoScaling *bool
@@ -58,7 +58,7 @@ type KubernetesTurndownManager struct {
 	log         logging.NamedLogger
 }
 
-func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.ComputeProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
+func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.TurndownProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
 	return &KubernetesTurndownManager{
 		client:      client,
 		provider:    provider,

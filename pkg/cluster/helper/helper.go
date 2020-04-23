@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
@@ -71,6 +72,17 @@ func NodePtr(n v1.Node) *v1.Node {
 //--------------------------------------------------------------------------
 //  Kubernetes Waits
 //--------------------------------------------------------------------------
+
+// Waits until a specific pod is deleted/evicted.
+func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, timeout time.Duration) error {
+	return wait.PollImmediate(interval, timeout, func() (bool, error) {
+		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
+		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
+			return true, nil
+		}
+		return false, err
+	})
+}
 
 // WaitUntilNodeCreated is a cluster helper method that runs a poll against the kubernetes api to
 // determine if a node has been created or not.

@@ -20,11 +20,11 @@ const (
 
 type MasterlessTurndownStrategy struct {
 	client   kubernetes.Interface
-	provider provider.ComputeProvider
+	provider provider.TurndownProvider
 	log      logging.NamedLogger
 }
 
-func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provider.ComputeProvider) TurndownStrategy {
+func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provider.TurndownProvider) TurndownStrategy {
 	return &MasterlessTurndownStrategy{
 		client:   client,
 		provider: provider,

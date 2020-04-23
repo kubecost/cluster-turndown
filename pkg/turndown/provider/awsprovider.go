@@ -30,10 +30,10 @@ type AWSProvider struct {
 	log             logging.NamedLogger
 }
 
-func NewAWSProvider(kubernetes kubernetes.Interface) ComputeProvider {
+func NewAWSProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
 	return &AWSProvider{
 		kubernetes:      kubernetes,
-		clusterProvider: cp.NewAWSClusterProvider(kubernetes),
+		clusterProvider: clusterProvider,
 		log:             logging.NamedLogger("AWSProvider"),
 	}
 }

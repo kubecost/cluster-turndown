@@ -36,7 +36,7 @@ type TurndownEndpoints struct {
 	client     clientset.Interface
 	scheduler  *TurndownScheduler
 	turndown   TurndownManager
-	provider   provider.ComputeProvider
+	provider   provider.TurndownProvider
 }
 
 func NewTurndownEndpoints(
@@ -44,7 +44,7 @@ func NewTurndownEndpoints(
 	client clientset.Interface,
 	scheduler *TurndownScheduler,
 	turndown TurndownManager,
-	provider provider.ComputeProvider) *TurndownEndpoints {
+	provider provider.TurndownProvider) *TurndownEndpoints {
 
 	return &TurndownEndpoints{
 		kubeClient: kubeClient,

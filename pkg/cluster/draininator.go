@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
 	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
 
@@ -17,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -323,9 +323,12 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 		go func(p v1.Pod) {
 			defer wc.Done()
 
-			err := WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
+			err := helper.WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
+
 			if err != nil {
 				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+			} else {
+				d.log.SLog("Pod %s.%s is deleted.", p.Namespace, p.Name)
 			}
 		}(pod)
 	}
@@ -389,9 +392,11 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 				time.Sleep(5 * time.Second)
 			}
 
-			err = WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
+			err = helper.WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
 			if err != nil {
 				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+			} else {
+				d.log.SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
 			}
 		}(p)
 	}
@@ -402,30 +407,4 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 	case <-time.After(globalTimeout):
 		return fmt.Errorf("Timed out while attempting to delete pods.")
 	}
-}
-
-// Waits until a specific pod is deleted/evicted.
-func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, timeout time.Duration) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
-		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
-			logging.NamedLogger("Draininator").SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
-			return true, nil
-		}
-		return false, err
-	})
-}
-
-func WaitUntilNodeCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelValue, nodePoolName string, interval, timeout time.Duration) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		nodeList, err := client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", nodeLabelKey, nodeLabelValue),
-		})
-		for _, node := range nodeList.Items {
-			if strings.Contains(node.Name, nodePoolName) {
-				return true, nil
-			}
-		}
-		return false, err
-	})
 }
