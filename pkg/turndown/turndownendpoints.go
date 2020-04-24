@@ -120,7 +120,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 				return true, nil
 			}
 
-			return false, fmt.Errorf("Schedule not available")
+			return false, nil
 		})
 
 		if err != nil {
