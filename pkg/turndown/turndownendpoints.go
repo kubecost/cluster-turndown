@@ -57,7 +57,6 @@ func NewTurndownEndpoints(
 
 func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method == http.MethodGet {
 		schedule := te.scheduler.GetSchedule()
@@ -143,7 +142,6 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 
 func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	scheduleList, err := te.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
 	if err != nil {
