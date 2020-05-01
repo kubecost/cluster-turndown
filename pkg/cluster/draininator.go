@@ -1,4 +1,4 @@
-package turndown
+package cluster
 
 import (
 	"errors"
@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -17,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -33,6 +33,7 @@ type Draininator struct {
 	force              bool
 	ignoreDaemonSets   bool
 	deleteLocalData    bool
+	ignorePods         []string
 	log                logging.NamedLogger
 }
 
@@ -40,7 +41,7 @@ type Draininator struct {
 type PodFilter func(v1.Pod) (bool, error)
 
 // Creates a new Draininator instance for a specific node.
-func NewDraininator(client kubernetes.Interface, node string) *Draininator {
+func NewDraininator(client kubernetes.Interface, node string, ignorePods []string) *Draininator {
 	return &Draininator{
 		client: client,
 		node:   node,
@@ -50,6 +51,7 @@ func NewDraininator(client kubernetes.Interface, node string) *Draininator {
 		force:              true,
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
+		ignorePods:         ignorePods,
 		log:                logging.NamedLogger("Draininator"),
 	}
 }
@@ -145,6 +147,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 		d.localStorageFilter,
 		d.unreplicatedFilter,
 		d.autoscalerFilter,
+		d.ignoredPodFilter,
 	}
 	for _, pod := range allPods.Items {
 		deletable := true
@@ -210,6 +213,18 @@ func (d *Draininator) autoscalerFilter(pod v1.Pod) (bool, error) {
 	if found && enabled == "false" {
 		d.log.Debug("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
+	}
+
+	return true, nil
+}
+
+// ignores pods by name specified in the list provided during instantiation
+func (d *Draininator) ignoredPodFilter(pod v1.Pod) (bool, error) {
+	for _, ignoredPod := range d.ignorePods {
+		if strings.EqualFold(ignoredPod, pod.Name) {
+			d.log.Debug("%s is the current pod, it won't be deleted", pod.Name)
+			return false, nil
+		}
 	}
 
 	return true, nil
@@ -308,9 +323,12 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 		go func(p v1.Pod) {
 			defer wc.Done()
 
-			err := WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
+			err := helper.WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
+
 			if err != nil {
 				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+			} else {
+				d.log.SLog("Pod %s.%s is deleted.", p.Namespace, p.Name)
 			}
 		}(pod)
 	}
@@ -374,9 +392,11 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 				time.Sleep(5 * time.Second)
 			}
 
-			err = WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
+			err = helper.WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
 			if err != nil {
 				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+			} else {
+				d.log.SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
 			}
 		}(p)
 	}
@@ -387,30 +407,4 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 	case <-time.After(globalTimeout):
 		return fmt.Errorf("Timed out while attempting to delete pods.")
 	}
-}
-
-// Waits until a specific pod is deleted/evicted.
-func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, timeout time.Duration) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
-		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
-			logging.NamedLogger("Draininator").SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
-			return true, nil
-		}
-		return false, err
-	})
-}
-
-func WaitUntilNodeCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelValue, nodePoolName string, interval, timeout time.Duration) error {
-	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		nodeList, err := client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", nodeLabelKey, nodeLabelValue),
-		})
-		for _, node := range nodeList.Items {
-			if strings.Contains(node.Name, nodePoolName) {
-				return true, nil
-			}
-		}
-		return false, err
-	})
 }

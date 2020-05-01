@@ -1,11 +1,11 @@
-package turndown
+package cluster
 
 import (
 	"fmt"
 	"strconv"
 
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"

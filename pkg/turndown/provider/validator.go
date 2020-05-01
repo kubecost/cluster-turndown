@@ -8,7 +8,7 @@ import (
 )
 
 // Validation of provider by checking the GetNodePools() call
-func validateProvider(provider ComputeProvider, maxRetries int, done chan<- error) {
+func validateProvider(provider TurndownProvider, maxRetries int, done chan<- error) {
 	interval := time.Second * 10
 
 	for retries := 0; retries < maxRetries; retries++ {
@@ -35,7 +35,7 @@ func validateProvider(provider ComputeProvider, maxRetries int, done chan<- erro
 }
 
 // Validate will return an error if the validation on a ComputeProvider fails
-func Validate(provider ComputeProvider, maxRetries int) error {
+func Validate(provider TurndownProvider, maxRetries int) error {
 	klog.Infof("Validating Provider")
 
 	done := make(chan error, 1)

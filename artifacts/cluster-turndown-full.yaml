@@ -196,10 +196,6 @@ spec:
           value: cluster-turndown
         - name: GOOGLE_APPLICATION_CREDENTIALS
           value: /var/keys/service-key.json
-        ports:
-        - name: http-server
-          containerPort: 9731
-          hostPort: 9731
       serviceAccount: cluster-turndown
       serviceAccountName: cluster-turndown
       volumes:

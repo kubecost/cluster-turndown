@@ -1,4 +1,3 @@
-  
 FROM golang:latest as build-env
 
 RUN mkdir /app

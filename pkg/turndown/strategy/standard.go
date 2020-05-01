@@ -3,7 +3,7 @@ package strategy
 import (
 	"fmt"
 
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -22,10 +22,10 @@ const (
 
 type StandardTurndownStrategy struct {
 	client   kubernetes.Interface
-	provider provider.ComputeProvider
+	provider provider.TurndownProvider
 }
 
-func NewStandardTurndownStrategy(client kubernetes.Interface, provider provider.ComputeProvider) TurndownStrategy {
+func NewStandardTurndownStrategy(client kubernetes.Interface, provider provider.TurndownProvider) TurndownStrategy {
 	return &StandardTurndownStrategy{
 		client:   client,
 		provider: provider,
@@ -44,10 +44,6 @@ func (mts *StandardTurndownStrategy) TaintKey() string {
 // This method will locate or create a node, apply a specific taint and
 // label, and return the updated kubernetes Node instance.
 func (ktdm *StandardTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) {
-	if !ktdm.provider.IsServiceAccountKey() {
-		return nil, fmt.Errorf("The current provider does not have a service account key set.")
-	}
-
 	// Locate the master node using role labels
 	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
 		LabelSelector: MasterNodeLabelKey,

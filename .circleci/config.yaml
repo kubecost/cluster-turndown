@@ -1,0 +1,11 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:latest
+
+    working_directory: /go/src/github.com/kubecost/cluster-turndown
+    steps:
+      - checkout
+      - run: go get -v -t -d ./...
+      - run: go test -v ./...

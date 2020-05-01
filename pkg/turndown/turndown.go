@@ -3,8 +3,10 @@ package turndown
 import (
 	"os"
 
+	"github.com/kubecost/cluster-turndown/pkg/cluster"
+	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
+	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/patcher"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
 	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
 
@@ -48,15 +50,15 @@ type TurndownManager interface {
 
 type KubernetesTurndownManager struct {
 	client      kubernetes.Interface
-	provider    provider.ComputeProvider
+	provider    provider.TurndownProvider
 	strategy    strategy.TurndownStrategy
 	currentNode string
 	autoScaling *bool
-	nodePools   []provider.NodePool
+	nodePools   []cp.NodePool
 	log         logging.NamedLogger
 }
 
-func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.ComputeProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
+func NewKubernetesTurndownManager(client kubernetes.Interface, provider provider.TurndownProvider, strategy strategy.TurndownStrategy, currentNode string) TurndownManager {
 	return &KubernetesTurndownManager{
 		client:      client,
 		provider:    provider,
@@ -157,7 +159,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// 2. Use provider to get all node pools used for this cluster, determine
 	// whether or not there exists autoscaling node pools
 	var isAutoScalingCluster bool = false
-	pools := make(map[string]provider.NodePool)
+	pools := make(map[string]cp.NodePool)
 	nodePools, err := ktdm.provider.GetNodePools()
 	if err != nil {
 		return err
@@ -172,7 +174,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// If this cluster has autoscaling nodes, we consider the entire cluster
 	// autoscaling. Run Flatten on the cluster to reduce deployments and daemonsets
 	// to 0 replicas. Otherwise, just suspend cron jobs
-	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if isAutoScalingCluster {
 		ktdm.log.Log("Found Cluster-AutoScaler. Flattening Cluster...")
 
@@ -211,7 +213,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 			continue
 		}
 
-		draininator := NewDraininator(ktdm.client, n.Name)
+		draininator := cluster.NewDraininator(ktdm.client, n.Name, nil)
 		err = draininator.Drain()
 		if err != nil {
 			ktdm.log.Err("Failed: %s - Error: %s", n.Name, err.Error())
@@ -219,7 +221,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	}
 
 	// 4. Filter out the current node pool holding the current node and/or autoscaling
-	targetPools := []provider.NodePool{}
+	targetPools := []cp.NodePool{}
 	for _, np := range nodePools {
 		if np.Name() == currentNodePoolID || np.AutoScaling() {
 			continue
@@ -250,7 +252,7 @@ func (ktdm *KubernetesTurndownManager) loadNodePools() error {
 		return err
 	}
 
-	var nodePools []provider.NodePool
+	var nodePools []cp.NodePool
 	for _, pool := range pools {
 		autoscaling := pool.AutoScaling()
 
@@ -276,7 +278,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 			ktdm.log.Err("Failed to load NodeGroups: %s", err.Error())
 
 			// Check for autoscaling expansion
-			flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+			flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 
 			isAutoscaling := flattener.IsClusterFlattened()
 			ktdm.autoScaling = &isAutoscaling
@@ -296,7 +298,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	}
 
 	// 3. Expand Autoscaling Nodes or Resume Jobs
-	flattener := NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
 	if ktdm.autoScaling != nil && *ktdm.autoScaling {
 		ktdm.log.Log("Expanding Cluster...")
 

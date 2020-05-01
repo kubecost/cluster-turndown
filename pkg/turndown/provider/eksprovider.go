@@ -15,50 +15,46 @@ import (
 )
 
 const (
-	AWSClusterIDTagKey      = "KubernetesCluster"
-	AWSGroupNameTagKey      = "aws:autoscaling:groupName"
-	AWSRoleMasterTagKey     = "k8s.io/role/master"
-	AWSRoleNodeTagKey       = "k8s.io/role/node"
-	AWSNodeGroupPreviousKey = "cluster.turndown.previous"
-	AWSTurndownPoolName     = "cluster-turndown"
+	EKSNodeGroupPreviousKey = "cluster.turndown.previous"
+	EKSTurndownPoolName     = "cluster-turndown"
 )
 
-// ComputeProvider for AWS
-type AWSProvider struct {
+// ComputeProvider for AWS EKS
+type EKSProvider struct {
 	kubernetes      kubernetes.Interface
 	clusterProvider cp.ClusterProvider
 	log             logging.NamedLogger
 }
 
-func NewAWSProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
-	return &AWSProvider{
+func NewEKSProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
+	return &EKSProvider{
 		kubernetes:      kubernetes,
 		clusterProvider: clusterProvider,
-		log:             logging.NamedLogger("AWSProvider"),
+		log:             logging.NamedLogger("EKSProvider"),
 	}
 }
 
-func (p *AWSProvider) IsTurndownNodePool() bool {
-	return p.clusterProvider.IsNodePool(AWSTurndownPoolName)
+func (p *EKSProvider) IsTurndownNodePool() bool {
+	return p.clusterProvider.IsNodePool(EKSTurndownPoolName)
 }
 
-func (p *AWSProvider) CreateSingletonNodePool() error {
+func (p *EKSProvider) CreateSingletonNodePool() error {
 	ctx := context.TODO()
 
-	return p.clusterProvider.CreateNodePool(ctx, AWSTurndownPoolName, "t2.small", 1, "gp2", 10, map[string]string{
+	return p.clusterProvider.CreateNodePool(ctx, EKSTurndownPoolName, "t2.small", 1, "gp2", 10, map[string]string{
 		TurndownNodeLabel: "true",
 	})
 }
 
-func (p *AWSProvider) GetPoolID(node *v1.Node) string {
+func (p *EKSProvider) GetPoolID(node *v1.Node) string {
 	return p.clusterProvider.GetNodePoolName(node)
 }
 
-func (p *AWSProvider) GetNodePools() ([]cp.NodePool, error) {
+func (p *EKSProvider) GetNodePools() ([]cp.NodePool, error) {
 	return p.clusterProvider.GetNodePools()
 }
 
-func (p *AWSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) error {
+func (p *EKSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) error {
 	if len(nodePools) == 0 {
 		return nil
 	}
@@ -77,7 +73,7 @@ func (p *AWSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) erro
 		}
 
 		err = p.clusterProvider.CreateOrUpdateTags(c, np, false, map[string]string{
-			AWSNodeGroupPreviousKey: rng,
+			EKSNodeGroupPreviousKey: rng,
 		})
 		if err != nil {
 			p.log.Err("Creating or Updating Tags: %s", err.Error())
@@ -89,7 +85,7 @@ func (p *AWSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) erro
 	return nil
 }
 
-func (p *AWSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
+func (p *EKSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 	if len(nodePools) == 0 {
 		return nil
 	}
@@ -99,9 +95,9 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 
 	for _, np := range nodePools {
 		tags := np.Tags()
-		rangeTag, ok := tags[AWSNodeGroupPreviousKey]
+		rangeTag, ok := tags[EKSNodeGroupPreviousKey]
 		if !ok {
-			p.log.Err("Failed to locate tag: %s for NodePool: %s", AWSNodeGroupPreviousKey, np.Name())
+			p.log.Err("Failed to locate tag: %s for NodePool: %s", EKSNodeGroupPreviousKey, np.Name())
 			continue
 		}
 
@@ -117,7 +113,7 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 			return err
 		}
 
-		err = p.clusterProvider.DeleteTags(c, np, []string{AWSNodeGroupPreviousKey})
+		err = p.clusterProvider.DeleteTags(c, np, []string{EKSNodeGroupPreviousKey})
 		if err != nil {
 			p.log.Err("Deleting Tags: %s", err.Error())
 
@@ -128,11 +124,11 @@ func (p *AWSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 	return nil
 }
 
-func (p *AWSProvider) flatRange(min, max, count int32) string {
+func (p *EKSProvider) flatRange(min, max, count int32) string {
 	return fmt.Sprintf("%d/%d/%d", min, max, count)
 }
 
-func (p *AWSProvider) expandRange(s string) (int32, int32, int32) {
+func (p *EKSProvider) expandRange(s string) (int32, int32, int32) {
 	values := strings.Split(s, "/")
 
 	count, err := strconv.Atoi(values[2])
