@@ -14,6 +14,7 @@ Note that in order to run `gke-create-service-key.sh` successfully, you will nee
 In order to turndown the node pools on GKE, you'll need to provide a service account key with the following permissions:
 - container.clusters.get
 - container.clusters.update
+- container.clusters.delete
 - compute.instances.list
 - iam.serviceAccounts.actAs
 - container.nodes.create
@@ -46,6 +47,6 @@ The parameters to supply the script are as follows:
 #### Notes
 If you have run this script more than once, the custom permissions role may have already been created. You may see an error similar to the following:
 ```
-ERROR: (gcloud.iam.roles.create) Resource in project [PROJECT_ID] is the subject of a conflict: A role named cluster.turndown in projects/[PROJECT_ID] already exists.
+ERROR: (gcloud.iam.roles.create) Resource in project [PROJECT_ID] is the subject of a conflict: A role named cluster.turndown.v2 in projects/[PROJECT_ID] already exists.
 ```
 This error is harmless, and the script should continue.
