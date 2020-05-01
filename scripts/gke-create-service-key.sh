@@ -4,6 +4,7 @@
 PROJECT_ID=$1
 SERVICE_ACCOUNT_NAME=$2
 NAMESPACE=$3
+SECRET_NAME=$4
 DIR=`pwd`
 
 is_default=0
@@ -12,7 +13,7 @@ usage() {
     echo "$1"
     echo ""
     echo "Usage: "
-    echo "./gke-create-service-key.sh <Project ID> <Service Account Name>"
+    echo "./gke-create-service-key.sh <Project ID> <Service Account Name> <Namespace> <Secret Name>"
     echo ""
     echo "   Project ID: "
     echo "   The GCP project identifier you can find via: 'gcloud config get-value project'"
@@ -22,6 +23,9 @@ usage() {
     echo ""
     echo "   Namespace (Optional, Default: turndown): "
     echo "   The desired namespace to use with the secret. If this namespace is left empty, 'turndown' is used."
+    echo ""
+    echo "   Secret Name (Optional, Default: cluster-turndown-service-key): "
+    echo "   The desired name of the secret. If this option is left empty, 'cluster-turndown-service-key' is used."
     echo ""
 }
 
@@ -40,6 +44,10 @@ if [ "$NAMESPACE" == "" ]; then
     is_default=1
 fi
 
+if [ "$SECRET_NAME" == "" ]; then
+    SECRET_NAME="cluster-turndown-service-key"
+fi
+
 # Generate a yaml input with desired permissions for running turndown on GKE
 cat <<EOF > cluster-turndown-role.yaml
 title: "Cluster Turndown"
@@ -48,6 +56,7 @@ stage: "ALPHA"
 includedPermissions:
 - container.clusters.get
 - container.clusters.update
+- container.clusters.delete
 - compute.instances.list
 - iam.serviceAccounts.actAs
 - container.nodes.create
@@ -61,12 +70,12 @@ includedPermissions:
 EOF
 
 # Create a new Role using the permissions listened in the yaml and remove permissions yaml
-gcloud iam roles create cluster.turndown --project $PROJECT_ID --file cluster-turndown-role.yaml
+gcloud iam roles create cluster.turndown.v2 --project $PROJECT_ID --file cluster-turndown-role.yaml
 rm -f cluster-turndown-role.yaml
 
 # Create a new service account with the provided inputs and assign the new role
 gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name $SERVICE_ACCOUNT_NAME --format json && \
-    gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/cluster.turndown && \
+    gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/cluster.turndown.v2 && \
     gcloud iam service-accounts keys create $DIR/service-key.json --iam-account $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
 
 if [ "$?" == "1" ]; then 
@@ -86,11 +95,11 @@ EOF
 fi
 
 # Determine if there is already a key 
-kubectl describe secret cluster-turndown-service-key -n $NAMESPACE > /dev/null 2>&1
+kubectl describe secret $SECRET_NAME -n $NAMESPACE > /dev/null 2>&1
 if [ "$?" == "0" ]; then
     echo "Located an existing secret 'cluster-turndown-service-key'. Deleting..."
-    kubectl delete secret cluster-turndown-service-key -n $NAMESPACE
+    kubectl delete secret $SECRET_NAME -n $NAMESPACE
 fi
 
 # Create the Secret containing the service key
-kubectl create secret generic cluster-turndown-service-key -n $NAMESPACE --from-file=$DIR/service-key.json
+kubectl create secret generic $SECRET_NAME -n $NAMESPACE --from-file=$DIR/service-key.json
