@@ -26,7 +26,7 @@ func validateProvider(provider TurndownProvider, maxRetries int, done chan<- err
 		}
 
 		if retries != (maxRetries - 1) {
-			klog.Infof("Retrying (%d remaining) in %d seconds...", maxRetries-retries-1, interval.Seconds)
+			klog.Infof("Retrying (%d remaining) in %d seconds...", maxRetries-retries-1, int64(interval.Seconds()))
 			time.Sleep(interval)
 		}
 	}
