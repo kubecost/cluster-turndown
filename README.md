@@ -19,7 +19,7 @@ The parameters to supply the script are as follows:
 
 ---
 
-### AWS (Kops) Setup
+### EKS & AWS Kops Setup
 
 Create a new User with **AutoScalingFullAccess** permissions. Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
 
