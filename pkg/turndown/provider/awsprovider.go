@@ -42,12 +42,10 @@ func (p *AWSProvider) IsTurndownNodePool() bool {
 	return p.clusterProvider.IsNodePool(AWSTurndownPoolName)
 }
 
-func (p *AWSProvider) CreateSingletonNodePool() error {
+func (p *AWSProvider) CreateSingletonNodePool(labels map[string]string) error {
 	ctx := context.TODO()
 
-	return p.clusterProvider.CreateNodePool(ctx, AWSTurndownPoolName, "t2.small", 1, "gp2", 10, map[string]string{
-		TurndownNodeLabel: "true",
-	})
+	return p.clusterProvider.CreateNodePool(ctx, AWSTurndownPoolName, "t2.small", 1, "gp2", 10, toTurndownNodePoolLabels(labels))
 }
 
 func (p *AWSProvider) GetPoolID(node *v1.Node) string {

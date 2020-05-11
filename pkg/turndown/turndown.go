@@ -75,7 +75,7 @@ func (ktdm *KubernetesTurndownManager) IsScaledDown() bool {
 
 func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
 	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-		LabelSelector: "cluster-turndown-node=true",
+		LabelSelector: provider.TurndownNodeLabelSelector,
 	})
 	if err != nil {
 		return false, err
@@ -136,7 +136,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 			Operator: v1.TolerationOpExists,
 		})
 		d.Spec.Template.Spec.NodeSelector = map[string]string{
-			"cluster-turndown-node": "true",
+			provider.TurndownNodeLabel: "true",
 		}
 		return nil
 	})

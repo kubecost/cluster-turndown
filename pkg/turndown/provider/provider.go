@@ -2,7 +2,6 @@ package provider
 
 import (
 	"errors"
-	"net/http"
 	"strings"
 
 	"cloud.google.com/go/compute/metadata"
@@ -17,29 +16,21 @@ import (
 )
 
 const (
-	TurndownNodeLabel = "cluster-turndown-node"
+	TurndownNodeLabel         = "cluster-turndown-node"
+	TurndownNodeLabelSelector = "cluster-turndown-node=true"
 )
-
-type UserAgentTransport struct {
-	userAgent string
-	base      http.RoundTripper
-}
-
-func (t UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Set("User-Agent", t.userAgent)
-	return t.base.RoundTrip(req)
-}
 
 // TurndownProvider contains methods used to manage turndown
 type TurndownProvider interface {
 	IsTurndownNodePool() bool
-	CreateSingletonNodePool() error
+	CreateSingletonNodePool(labels map[string]string) error
 	GetNodePools() ([]cp.NodePool, error)
 	GetPoolID(node *v1.Node) string
 	SetNodePoolSizes(nodePools []cp.NodePool, size int32) error
 	ResetNodePoolSizes(nodePools []cp.NodePool) error
 }
 
+// Creates a new TurndownProvider implementation using the kubernetes client instance a ClusterProvider
 func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.ClusterProvider) (TurndownProvider, error) {
 	if metadata.OnGCE() {
 		return NewGKEProvider(client, clusterProvider), nil
@@ -66,4 +57,18 @@ func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.Cluster
 		klog.V(2).Info("Unsupported provider, falling back to default")
 		return nil, errors.New("Custom Not Supported")
 	}
+}
+
+// Utility function which creates a new map[string]string containing turndown labels in addition
+// to the provided labels
+func toTurndownNodePoolLabels(labels map[string]string) map[string]string {
+	m := map[string]string{
+		TurndownNodeLabel: "true",
+	}
+
+	for k, v := range labels {
+		m[k] = v
+	}
+
+	return m
 }

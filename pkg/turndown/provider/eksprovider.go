@@ -38,12 +38,10 @@ func (p *EKSProvider) IsTurndownNodePool() bool {
 	return p.clusterProvider.IsNodePool(EKSTurndownPoolName)
 }
 
-func (p *EKSProvider) CreateSingletonNodePool() error {
+func (p *EKSProvider) CreateSingletonNodePool(labels map[string]string) error {
 	ctx := context.TODO()
 
-	return p.clusterProvider.CreateNodePool(ctx, EKSTurndownPoolName, "t2.small", 1, "gp2", 10, map[string]string{
-		TurndownNodeLabel: "true",
-	})
+	return p.clusterProvider.CreateNodePool(ctx, EKSTurndownPoolName, "t2.small", 1, "gp2", 10, toTurndownNodePoolLabels(labels))
 }
 
 func (p *EKSProvider) GetPoolID(node *v1.Node) string {
