@@ -93,11 +93,13 @@ func runTurndownResourceController(kubeClient kubernetes.Interface, tdClient cli
 // For now, we'll choose our strategy based on the provider, but functionally, there is
 // no dependency.
 func strategyForProvider(c kubernetes.Interface, p provider.TurndownProvider) (strategy.TurndownStrategy, error) {
+	m := make(map[string]string)
+
 	switch v := p.(type) {
 	case *provider.GKEProvider:
-		return strategy.NewMasterlessTurndownStrategy(c, p), nil
+		return strategy.NewMasterlessTurndownStrategy(c, p, m), nil
 	case *provider.EKSProvider:
-		return strategy.NewMasterlessTurndownStrategy(c, p), nil
+		return strategy.NewMasterlessTurndownStrategy(c, p, m), nil
 	case *provider.AWSProvider:
 		return strategy.NewStandardTurndownStrategy(c, p), nil
 	default:

@@ -38,12 +38,10 @@ func (p *GKEProvider) IsTurndownNodePool() bool {
 	return p.clusterProvider.IsNodePool(GKETurndownPoolName)
 }
 
-func (p *GKEProvider) CreateSingletonNodePool() error {
+func (p *GKEProvider) CreateSingletonNodePool(labels map[string]string) error {
 	ctx := context.TODO()
 
-	return p.clusterProvider.CreateNodePool(ctx, GKETurndownPoolName, "g1-small", 1, "pd-standard", 10, map[string]string{
-		TurndownNodeLabel: "true",
-	})
+	return p.clusterProvider.CreateNodePool(ctx, GKETurndownPoolName, "g1-small", 1, "pd-standard", 10, toTurndownNodePoolLabels(labels))
 }
 
 func (p *GKEProvider) GetPoolID(node *v1.Node) string {

@@ -18,17 +18,26 @@ const (
 	MasterlessTaintKey = "CriticalAddonsOnly"
 )
 
+// MasterlessTurndownStrategy is a TurndownStrategy implementation used in managed kubernetes where the master control plane is
+// not available as a node to the cluster. When the turndown schedule occurs, a new node pool with a single "small" node is created.
+// Taints are added to this node to only allow specific pods to be scheduled there. We update the turndown deployment such
+// that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and
+// resume scaledown. This is done by cordoning all nodes in the cluster (other than our new small node), and then reducing the node pool
+// sizes to 0.
 type MasterlessTurndownStrategy struct {
-	client   kubernetes.Interface
-	provider provider.TurndownProvider
-	log      logging.NamedLogger
+	client         kubernetes.Interface
+	provider       provider.TurndownProvider
+	nodePoolLabels map[string]string
+	log            logging.NamedLogger
 }
 
-func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provider.TurndownProvider) TurndownStrategy {
+// Creates a new MasterlessTurndownStrategy instance
+func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provider.TurndownProvider, npLabels map[string]string) TurndownStrategy {
 	return &MasterlessTurndownStrategy{
-		client:   client,
-		provider: provider,
-		log:      logging.NamedLogger("MasterlessStrategy"),
+		client:         client,
+		provider:       provider,
+		nodePoolLabels: npLabels,
+		log:            logging.NamedLogger("MasterlessStrategy"),
 	}
 }
 
@@ -70,7 +79,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		if !ktdm.provider.IsTurndownNodePool() {
 			// Create a new singleton node pool with a small instance capable of hosting the turndown
 			// pod -- this implementation will create and wait for the node to exist before returning
-			err := ktdm.provider.CreateSingletonNodePool()
+			err := ktdm.provider.CreateSingletonNodePool(ktdm.nodePoolLabels)
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +87,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 
 		// Lookup the turndown node in the kubernetes API
 		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
-			LabelSelector: "cluster-turndown-node=true",
+			LabelSelector: provider.TurndownNodeLabelSelector,
 		})
 		if err != nil {
 			return nil, err
@@ -105,7 +114,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		}
 
 		// Patch and get the updated node
-		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, "cluster-turndown-node", "true")
+		tnode, err = patcher.UpdateNodeLabel(ktdm.client, *targetNode, provider.TurndownNodeLabel, "true")
 		if err != nil {
 			return nil, err
 		}
