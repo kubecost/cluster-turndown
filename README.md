@@ -21,7 +21,63 @@ The parameters to supply the script are as follows:
 
 ### EKS & AWS Kops Setup
 
-Create a new User with **AutoScalingFullAccess** permissions. Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
+Create a new User or IAM role with **AutoScalingFullAccess** permissions. 
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "autoscaling:*",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "cloudwatch:PutMetricAlarm",
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeAccountAttributes",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeImages",
+                "ec2:DescribeInstanceAttribute",
+                "ec2:DescribeInstances",
+                "ec2:DescribeKeyPairs",
+                "ec2:DescribeLaunchTemplateVersions",
+                "ec2:DescribePlacementGroups",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSpotInstanceRequests",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeVpcClassicLink"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "elasticloadbalancing:DescribeLoadBalancers",
+                "elasticloadbalancing:DescribeTargetGroups"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": "iam:CreateServiceLinkedRole",
+            "Resource": "*",
+            "Condition": {
+                "StringEquals": {
+                    "iam:AWSServiceName": "autoscaling.amazonaws.com"
+                }
+            }
+        }
+    ]
+}```
+
+
+Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
 
 ```json
 {
