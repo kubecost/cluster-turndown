@@ -23,6 +23,7 @@ The parameters to supply the script are as follows:
 
 Create a new User or IAM role with **AutoScalingFullAccess** permissions. 
 
+JSON definition of those permissions:
 ```
 {
     "Version": "2012-10-17",
