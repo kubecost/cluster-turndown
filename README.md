@@ -75,10 +75,11 @@ JSON definition of those permissions:
             }
         }
     ]
-}```
-
+}
+```
 
 Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
+
 
 ```json
 {
