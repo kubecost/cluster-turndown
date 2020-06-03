@@ -1,5 +1,5 @@
 # Cluster Turndown
-Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's backing nodes based on a custom schedule and turndown criteria. This feature can be used to reduce spend during down hours and/or reduce surface area for security reasons. See more at the end of this document on the strategies used for turning down clusters from different cloud providers.
+Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's backing nodes based on a custom schedule and turndown criteria. This feature can be used to reduce spend during down hours and/or reduce surface area for security reasons. The most common use case is to scale non-prod environments (e.g. dev clusters) to zero during off hours. The project currently suppoort clusters on GKE, EKS, and kops on AWS. 
 
 **Note: Cluster Turndown is currently in _ALPHA_**
 
@@ -19,7 +19,7 @@ The parameters to supply the script are as follows:
 
 ---
 
-### EKS & AWS Kops Setup
+### EKS & AWS kops Setup
 
 For EKS cluster provisioning, if using `eksctl`, make sure that you use the `--managed` option when creating the cluster. Unmanaged nodegroups should be upgraded to managed. [More info](https://eksctl.io/usage/eks-managed-nodes/). 
 
@@ -236,9 +236,9 @@ If the turndown schedule is cancelled between a turndown and turn up, the turn u
 * **DO NOT** attempt to `kubectl edit` a turndown schedule. This is currently not supported. Recommended approach for modifying is to delete and then create a new schedule.
 * 20-minute minimim time window between start and end of turndown schedule
 
-## Turndown Strategies
+## How it works
 
-#### GKE Masterless Strategy
+#### Managed Cluster Strategy (e.g. GKE + EKS)
 When the turndown schedule occurs, a new node pool with a single g1-small node is created. Taints are added to this node to only allow specific pods to be scheduled there. We update our cluster-turndown deployment such that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and resume scaledown. This is done by cordoning all nodes in the cluster (other than our new g1-small node), and then reducing the node pool sizes to 0.
 
 #### GKE Autoscaler Strategy
