@@ -1,5 +1,5 @@
 # Cluster Turndown
-Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's backing nodes based on a custom schedule and turndown criteria. This feature can be used to reduce spend during down hours and/or reduce surface area for security reasons. The most common use case is to scale non-prod environments (e.g. dev clusters) to zero during off hours. The project currently suppoort clusters on GKE, EKS, and kops on AWS. 
+Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's backing nodes based on a custom schedule and turndown criteria. This feature can be used to reduce spend during down hours and/or reduce surface area for security reasons. The most common use case is to scale non-prod environments (e.g. dev clusters) to zero during off hours. The project currently suppoorts clusters on GKE, EKS, and kops on AWS. 
 
 **Note: Cluster Turndown is currently in _ALPHA_**
 
