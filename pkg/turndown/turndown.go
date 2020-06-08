@@ -174,7 +174,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	// If this cluster has autoscaling nodes, we consider the entire cluster
 	// autoscaling. Run Flatten on the cluster to reduce deployments and daemonsets
 	// to 0 replicas. Otherwise, just suspend cron jobs
-	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, ktdm.getDeploymentBlacklist())
 	if isAutoScalingCluster {
 		ktdm.log.Log("Found Cluster-AutoScaler. Flattening Cluster...")
 
@@ -278,7 +278,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 			ktdm.log.Err("Failed to load NodeGroups: %s", err.Error())
 
 			// Check for autoscaling expansion
-			flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
+			flattener := cluster.NewFlattener(ktdm.client, ktdm.getDeploymentBlacklist())
 
 			isAutoscaling := flattener.IsClusterFlattened()
 			ktdm.autoScaling = &isAutoscaling
@@ -298,7 +298,7 @@ func (ktdm *KubernetesTurndownManager) ScaleUpCluster() error {
 	}
 
 	// 3. Expand Autoscaling Nodes or Resume Jobs
-	flattener := cluster.NewFlattener(ktdm.client, KubecostFlattenerOmit)
+	flattener := cluster.NewFlattener(ktdm.client, ktdm.getDeploymentBlacklist())
 	if ktdm.autoScaling != nil && *ktdm.autoScaling {
 		ktdm.log.Log("Expanding Cluster...")
 
@@ -366,4 +366,14 @@ func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
 		return err
 	}
 	return nil
+}
+
+// Returns the deployment blacklist for flattening
+func (ktdm *KubernetesTurndownManager) getDeploymentBlacklist() []string {
+	deploymentName := os.Getenv("TURNDOWN_DEPLOYMENT")
+	if deploymentName == "" {
+		deploymentName = "cluster-turndown"
+	}
+
+	return append(KubecostFlattenerOmit, deploymentName)
 }
