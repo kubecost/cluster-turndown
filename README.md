@@ -153,6 +153,14 @@ To create this schedule, you may modify `example-schedule.yaml` to your desired 
 $ kubectl apply -f artifacts/example-schedule.yaml
 ```
 
+Currently, updating a resource is not supported, so if the scheduling of the `example-schedule` fails, you will need to delete the resource via:
+
+```bash
+$ kubectl delete tds example-schedule
+```
+
+Then make the modifications to the schedule and re-apply.
+
 ## Viewing a Turndown Schedule
 The `turndownschedule` resource can be listed via `kubectl` as well:
 
