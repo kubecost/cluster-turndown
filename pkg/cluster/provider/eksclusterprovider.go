@@ -2,9 +2,7 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"sync"
@@ -12,11 +10,9 @@ import (
 
 	"github.com/kubecost/cluster-turndown/pkg/async"
 	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/pkg/file"
 	"github.com/kubecost/cluster-turndown/pkg/logging"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/eks"
@@ -84,12 +80,11 @@ type EKSClusterProvider struct {
 }
 
 // NewEKSClusterProvider creates a new EKSClusterProvider instance as the ClusterProvider
-func NewEKSClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
+func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, error) {
 	region := findAWSRegion(kubernetes)
 	clusterManager, asgManager, err := newEKSClusterManager(region)
 	if err != nil {
-		klog.V(1).Infof("[Error] Failed to load service account.")
-		return nil
+		return nil, err
 	}
 
 	cp := &EKSClusterProvider{
@@ -103,11 +98,10 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
 
 	err = cp.initClusterData()
 	if err != nil {
-		klog.V(1).Infof("[Error] %s", err)
-		return nil
+		return nil, err
 	}
 
-	return cp
+	return cp, nil
 }
 
 // IsNodePool determines if there is a node pool with the name or not.
@@ -492,27 +486,18 @@ func (p *EKSClusterProvider) DeleteTags(c context.Context, nodePool NodePool, ke
 
 // Creates a new EKS based cluster manager API to execute cluster commands
 func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, error) {
-	if !file.FileExists(AWSAccessKey) {
-		return nil, nil, fmt.Errorf("Failed to locate service account file: %s", AWSAccessKey)
+	accessKey, err := loadAWSAccessKey(AWSAccessKey)
+	if err == nil {
+		os.Setenv(AWSAccessKeyID, accessKey.AccessKeyID)
+		os.Setenv(AWSSecretAccessKey, accessKey.SecretAccessKey)
+	} else {
+		klog.Infof("[Warning] Failed to load valid access key from secret. Err=%s", err)
 	}
-
-	result, err := ioutil.ReadFile(AWSAccessKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var ak AWSAccessKeyFile
-	err = json.Unmarshal(result, &ak)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	os.Setenv("AWS_ACCESS_KEY_ID", ak.AccessKeyID)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", ak.SecretAccessKey)
 
 	c := aws.NewConfig().
-		WithCredentials(credentials.NewEnvCredentials()).
-		WithRegion(region)
+		WithRegion(region).
+		WithCredentialsChainVerboseErrors(true)
+
 	clusterManager := eks.New(session.New(c))
 	asgManager := autoscaling.New(session.New(c))
 

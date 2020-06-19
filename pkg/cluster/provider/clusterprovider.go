@@ -68,8 +68,8 @@ type NodePool interface {
 // NewClusterProvider is a ClusterProvider factory method that uses the kubernetes client to
 // determine the provider and create the correct implementation.
 func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
-	if metadata.OnGCE() {
-		return NewGKEClusterProvider(client), nil
+	if client == nil {
+		return nil, errors.New("Could not create new TurndownProvider with nil Kubernetes client")
 	}
 
 	nodes, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
@@ -77,15 +77,23 @@ func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
 		return nil, err
 	}
 
+	if len(nodes.Items) == 0 {
+		return nil, errors.New("Could not locate any Nodes in Kubernetes cluster.")
+	}
+
+	if metadata.OnGCE() {
+		return NewGKEClusterProvider(client)
+	}
+
 	node := nodes.Items[0]
 	provider := strings.ToLower(node.Spec.ProviderID)
 	if strings.HasPrefix(provider, "aws") {
 		if _, ok := node.Labels["eks.amazonaws.com/nodegroup"]; ok {
 			klog.V(2).Info("Found ProviderID starting with \"aws\" and eks nodegroup, using EKS Provider")
-			return NewEKSClusterProvider(client), nil
+			return NewEKSClusterProvider(client)
 		}
 		klog.V(2).Info("Found ProviderID starting with \"aws\", using AWS Provider")
-		return NewAWSClusterProvider(client), nil
+		return NewAWSClusterProvider(client)
 	} else if strings.HasPrefix(provider, "azure") {
 		klog.V(2).Info("Found ProviderID starting with \"azure\", using Azure Provider")
 		return nil, errors.New("Azure Not Supported")

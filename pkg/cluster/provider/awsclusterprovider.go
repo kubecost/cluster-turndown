@@ -25,7 +25,6 @@ import (
 	"k8s.io/klog"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -34,6 +33,8 @@ import (
 
 const (
 	AWSAccessKey                  = "/var/keys/service-key.json"
+	AWSAccessKeyID                = "AWS_ACCESS_KEY_ID"
+	AWSSecretAccessKey            = "AWS_SECRET_ACCESS_KEY"
 	AWSClusterIDTagKey            = "KubernetesCluster"
 	AWSGroupNameTagKey            = "aws:autoscaling:groupName"
 	AWSRoleMasterTagKey           = "k8s.io/role/master"
@@ -394,12 +395,11 @@ type AWSClusterProvider struct {
 }
 
 // NewAWSClusterProvider creates a new AWSClusterProvider instance as the ClusterProvider
-func NewAWSClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
+func NewAWSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, error) {
 	region := findAWSRegion(kubernetes)
 	clusterManager, ec2Client, s3Client, err := newAWSClusterManager(region)
 	if err != nil {
-		klog.V(1).Infof("Failed to load service account.")
-		return nil
+		return nil, err
 	}
 
 	return &AWSClusterProvider{
@@ -409,7 +409,7 @@ func NewAWSClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
 		s3Client:       s3Client,
 		clusterData:    newAWSClusterData(),
 		log:            logging.NamedLogger("AWSClusterProvider"),
-	}
+	}, nil
 }
 
 // IsNodePool determines if there is a node pool with the name or not.
@@ -1002,28 +1002,43 @@ func (p *AWSClusterProvider) instanceInfoFor(node *v1.Node) (zone string, instan
 	return splitted[0], splitted[1]
 }
 
-func newAWSClusterManager(region string) (*autoscaling.AutoScaling, *ec2.EC2, *s3.S3, error) {
-	if !file.FileExists(AWSAccessKey) {
-		return nil, nil, nil, fmt.Errorf("Failed to locate service account file: %s", AWSAccessKey)
+// attempts to load the AWS access key from secret
+func loadAWSAccessKey(keyFile string) (*AWSAccessKeyFile, error) {
+	if !file.FileExists(keyFile) {
+		return nil, fmt.Errorf("Failed to locate service account file: %s", keyFile)
 	}
 
-	result, err := ioutil.ReadFile(AWSAccessKey)
+	result, err := ioutil.ReadFile(keyFile)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	var ak AWSAccessKeyFile
 	err = json.Unmarshal(result, &ak)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	os.Setenv("AWS_ACCESS_KEY_ID", ak.AccessKeyID)
-	os.Setenv("AWS_SECRET_ACCESS_KEY", ak.SecretAccessKey)
+	if ak.AccessKeyID == "" || ak.SecretAccessKey == "" {
+		return nil, fmt.Errorf("Failed to populate access from service key. Empty values.")
+	}
+
+	return &ak, nil
+}
+
+func newAWSClusterManager(region string) (*autoscaling.AutoScaling, *ec2.EC2, *s3.S3, error) {
+	accessKey, err := loadAWSAccessKey(AWSAccessKey)
+	if err == nil {
+		os.Setenv(AWSAccessKeyID, accessKey.AccessKeyID)
+		os.Setenv(AWSSecretAccessKey, accessKey.SecretAccessKey)
+	} else {
+		klog.Infof("[Warning] Failed to load valid access key from secret. Err=%s", err)
+	}
 
 	c := aws.NewConfig().
-		WithCredentials(credentials.NewEnvCredentials()).
-		WithRegion(region)
+		WithRegion(region).
+		WithCredentialsChainVerboseErrors(true)
+
 	clusterManager := autoscaling.New(session.New(c))
 	ec2Client := ec2.New(session.New(c))
 	s3Client := s3.New(session.New(c))
