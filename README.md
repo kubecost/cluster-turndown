@@ -80,6 +80,28 @@ JSON definition of those permissions:
 }
 ```
 
+For EKS clusters, add the following permissions to the above policy for EKS API access:
+
+```
+{
+    "Effect": "Allow",
+    "Action": [
+        "eks:ListClusters",
+        "eks:DescribeCluster",
+        "eks:DescribeNodegroup",
+        "eks:ListNodegroups",
+        "eks:CreateNodegroup",
+        "eks:UpdateClusterConfig",
+        "eks:UpdateNodegroupConfig",
+        "eks:DeleteNodegroup",
+        "eks:ListTagsForResource",
+        "eks:TagResource",
+        "eks:UntagResource"
+    ],
+    "Resource": "*"
+}
+```
+
 Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
 
 
