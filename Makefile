@@ -1,4 +1,4 @@
-VERSION=1.3-SNAPSHOT
+VERSION=1.2.2
 REGISTRY=gcr.io
 PROJECT_ID=kubecost1
 APPNAME=cluster-turndown
@@ -9,7 +9,7 @@ build:
 	docker build -t ${REGISTRY}/${PROJECT_ID}/${APPNAME}:${VERSION} .
 
 push:
-	gcloud docker -- push ${REGISTRY}/${PROJECT_ID}/${APPNAME}:${VERSION}
+	docker push ${REGISTRY}/${PROJECT_ID}/${APPNAME}:${VERSION}
 
 clean:
 	docker rm -f ${REGISTRY}/${PROJECT_ID}/${APPNAME}:${VERSION} 2> /dev/null || true
