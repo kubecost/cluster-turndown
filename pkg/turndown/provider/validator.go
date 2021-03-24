@@ -7,7 +7,9 @@ import (
 	"k8s.io/klog"
 )
 
-// Validation of provider by checking the GetNodePools() call
+// The purpose of validation is currently to check whether or not the supplied authentication
+// methods allow retrieval of the node pools.
+// TODO: Look into supporting permissions checks for feature subsets.
 func validateProvider(provider TurndownProvider, maxRetries int, done chan<- error) {
 	interval := time.Second * 10
 
@@ -36,7 +38,7 @@ func validateProvider(provider TurndownProvider, maxRetries int, done chan<- err
 
 // Validate will return an error if the validation on a ComputeProvider fails
 func Validate(provider TurndownProvider, maxRetries int) error {
-	klog.Infof("Validating Provider")
+	klog.Infof("Validating Provider...")
 
 	done := make(chan error, 1)
 	go validateProvider(provider, maxRetries, done)

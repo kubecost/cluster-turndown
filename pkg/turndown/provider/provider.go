@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"cloud.google.com/go/compute/metadata"
@@ -32,13 +33,24 @@ type TurndownProvider interface {
 
 // Creates a new TurndownProvider implementation using the kubernetes client instance a ClusterProvider
 func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.ClusterProvider) (TurndownProvider, error) {
-	if metadata.OnGCE() {
-		return NewGKEProvider(client, clusterProvider), nil
+	if client == nil {
+		return nil, fmt.Errorf("Could not create new TurndownProvider with nil Kubernetes client")
+	}
+	if clusterProvider == nil {
+		return nil, fmt.Errorf("Could not create new TurndownProvider with nil ClusterProvider implementation")
 	}
 
 	nodes, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return nil, err
+	}
+
+	if len(nodes.Items) == 0 {
+		return nil, fmt.Errorf("Could not locate any Nodes in Kubernetes cluster.")
+	}
+
+	if metadata.OnGCE() {
+		return NewGKEProvider(client, clusterProvider), nil
 	}
 
 	node := nodes.Items[0]
