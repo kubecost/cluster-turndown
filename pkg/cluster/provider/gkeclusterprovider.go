@@ -21,8 +21,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	gke "cloud.google.com/go/container/apiv1"
-
-	"k8s.io/klog"
 )
 
 const (
@@ -114,10 +112,10 @@ type GKEClusterProvider struct {
 }
 
 // NewGKEClusterProvider creates a new GKEClusterProvider instance as the ClusterProvider
-func NewGKEClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
+func NewGKEClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, error) {
 	clusterManager, err := newGKEClusterManager()
 	if err != nil {
-		klog.V(1).Infof("Failed to load service account.")
+		return nil, err
 	}
 
 	return &GKEClusterProvider{
@@ -125,7 +123,7 @@ func NewGKEClusterProvider(kubernetes kubernetes.Interface) ClusterProvider {
 		clusterManager: clusterManager,
 		metadata:       NewGKEMetaData(),
 		log:            logging.NamedLogger("GKEClusterProvider"),
-	}
+	}, nil
 }
 
 // IsNodePool determines if there is a node pool with the name or not.

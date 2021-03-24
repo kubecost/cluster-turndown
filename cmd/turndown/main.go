@@ -130,7 +130,7 @@ func main() {
 	// Platform Provider API
 	clusterProvider, err := cp.NewClusterProvider(kubeClient)
 	if err != nil {
-		klog.V(1).Infof("[Error]: Failed to determine provider: %s", err.Error())
+		klog.V(1).Infof("[Error]: Failed to create ClusterProvider: %s", err.Error())
 		return
 	}
 

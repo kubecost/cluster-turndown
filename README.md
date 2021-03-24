@@ -80,6 +80,28 @@ JSON definition of those permissions:
 }
 ```
 
+For EKS clusters, add the following permissions to the above policy for EKS API access:
+
+```
+{
+    "Effect": "Allow",
+    "Action": [
+        "eks:ListClusters",
+        "eks:DescribeCluster",
+        "eks:DescribeNodegroup",
+        "eks:ListNodegroups",
+        "eks:CreateNodegroup",
+        "eks:UpdateClusterConfig",
+        "eks:UpdateNodegroupConfig",
+        "eks:DeleteNodegroup",
+        "eks:ListTagsForResource",
+        "eks:TagResource",
+        "eks:UntagResource"
+    ],
+    "Resource": "*"
+}
+```
+
 Create a new file, service-key.json, and use the access key id and secret access key to fill out the following template:
 
 
@@ -152,6 +174,14 @@ To create this schedule, you may modify `example-schedule.yaml` to your desired 
 ```bash
 $ kubectl apply -f artifacts/example-schedule.yaml
 ```
+
+Currently, updating a resource is not supported, so if the scheduling of the `example-schedule` fails, you will need to delete the resource via:
+
+```bash
+$ kubectl delete tds example-schedule
+```
+
+Then make the modifications to the schedule and re-apply.
 
 ## Viewing a Turndown Schedule
 The `turndownschedule` resource can be listed via `kubectl` as well:
@@ -234,7 +264,7 @@ If the turndown schedule is cancelled between a turndown and turn up, the turn u
 ### Limitations
 * The internal scheduler only allows one schedule at a time to be used. Any additional schedule resources created will fail (`kubectl get tds -o yaml` will display the status).
 * **DO NOT** attempt to `kubectl edit` a turndown schedule. This is currently not supported. Recommended approach for modifying is to delete and then create a new schedule.
-* 20-minute minimim time window between start and end of turndown schedule
+* 20-minute minimum time window between start and end of turndown schedule
 
 ## How it works
 
