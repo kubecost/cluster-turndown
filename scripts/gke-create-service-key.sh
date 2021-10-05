@@ -74,7 +74,7 @@ gcloud iam roles create cluster.turndown.v2 --project $PROJECT_ID --file cluster
 rm -f cluster-turndown-role.yaml
 
 # Create a new service account with the provided inputs and assign the new role
-gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name $SERVICE_ACCOUNT_NAME --format json && \
+gcloud iam service-accounts create --project $PROJECT_ID $SERVICE_ACCOUNT_NAME --display-name $SERVICE_ACCOUNT_NAME --format json && \
     gcloud projects add-iam-policy-binding $PROJECT_ID --member serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com --role projects/$PROJECT_ID/roles/cluster.turndown.v2 && \
     gcloud iam service-accounts keys create $DIR/service-key.json --iam-account $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com
 
