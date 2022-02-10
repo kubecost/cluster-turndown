@@ -272,7 +272,15 @@ If the turndown schedule is cancelled between a turndown and turn up, the turn u
 When the turndown schedule occurs, a new node pool with a single g1-small node is created. Taints are added to this node to only allow specific pods to be scheduled there. We update our cluster-turndown deployment such that the turndown pod is allowed to schedule on the singleton node. Once the pod is moved to the new node, it will start back up and resume scaledown. This is done by cordoning all nodes in the cluster (other than our new g1-small node), and then reducing the node pool sizes to 0.
 
 #### GKE Autoscaler Strategy
-Whenever there exists at least one NodePool with the cluster-autoscaler enabled, the turndown will resize all non-autoscaling nodepools to 0, and schedule the turndown pod on one of the autoscaler nodepool nodes. Once it is brought back up, it will start a process called "flattening" which attempts to set deployment replicas to 0, turn off jobs, and annotate pods with labels that allow the autoscaler to do the rest of the work. Flattening persists pre-turndown values in the annotations of Kubernetes objects. When turn up occurs, deployments and daemonsets are "expanded" to their original sizes/replicas. There are four annotations that can be applied for this process:
+Whenever there exists at least one NodePool with the cluster-autoscaler enabled, the turndown will
+1. Resize all non-autoscaling nodepools to 0
+2. Schedule the turndown pod on one of the autoscaler nodepool nodes
+3. Once it is brought back up (rescheduled to the selected node), the turndown pod will start a process called "flattening" which attempts to set deployment replicas to 0, turn off jobs, and annotate pods with labels that allow the autoscaler to do the rest of the work. Flattening persists pre-turndown values in the annotations of Kubernetes objects.
+   
+   The GKE autoscaler behavior is expected to handle the rest: removing now-unneeded nodes from the node pools. A limitation of this strategy is that the autoscaled node pools won't go below their configured minimum node count.
+4. When turn up occurs, deployments and daemonsets are "expanded" to their original sizes/replicas. 
+
+There are four annotations that can be applied for this process:
 * **kubecost.kubernetes.io/job-suspend**: Stores a bool containing the previous paused state of a kubernetes CronJob.
 * **kubecost.kubernetes.io/turn-down-replicas**: Stores the previous number of replicas set on the deployment. 
 * **kubecost.kubernetes.io/turn-down-rollout**: Stores the previous maxUnavailable for the deployment rollout. 
