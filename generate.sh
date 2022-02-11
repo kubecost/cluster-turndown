@@ -53,4 +53,6 @@ rm -r ./pkg/generated
 mv ./${PACKAGE}/pkg/generated ./pkg/generated
 mv ./${PACKAGE}/pkg/apis/${API}/${VERSION}/* ./pkg/apis/${API}/${VERSION}
 
-rm -r vendor
+# Clean up temp directories created for/by code gen
+rm -r ./vendor
+rm -r ./github.com
