@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
@@ -22,15 +23,15 @@ type TurndownSchedulesGetter interface {
 
 // TurndownScheduleInterface has methods to work with TurndownSchedule resources.
 type TurndownScheduleInterface interface {
-	Create(*v1alpha1.TurndownSchedule) (*v1alpha1.TurndownSchedule, error)
-	Update(*v1alpha1.TurndownSchedule) (*v1alpha1.TurndownSchedule, error)
-	UpdateStatus(*v1alpha1.TurndownSchedule) (*v1alpha1.TurndownSchedule, error)
-	Delete(name string, options *v1.DeleteOptions) error
-	DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error
-	Get(name string, options v1.GetOptions) (*v1alpha1.TurndownSchedule, error)
-	List(opts v1.ListOptions) (*v1alpha1.TurndownScheduleList, error)
-	Watch(opts v1.ListOptions) (watch.Interface, error)
-	Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.TurndownSchedule, err error)
+	Create(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.CreateOptions) (*v1alpha1.TurndownSchedule, error)
+	Update(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (*v1alpha1.TurndownSchedule, error)
+	UpdateStatus(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (*v1alpha1.TurndownSchedule, error)
+	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
+	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.TurndownSchedule, error)
+	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.TurndownScheduleList, error)
+	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.TurndownSchedule, err error)
 	TurndownScheduleExpansion
 }
 
@@ -47,19 +48,19 @@ func newTurndownSchedules(c *KubecostV1alpha1Client) *turndownSchedules {
 }
 
 // Get takes name of the turndownSchedule, and returns the corresponding turndownSchedule object, and an error if there is any.
-func (c *turndownSchedules) Get(name string, options v1.GetOptions) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *turndownSchedules) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	result = &v1alpha1.TurndownSchedule{}
 	err = c.client.Get().
 		Resource("turndownschedules").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // List takes label and field selectors, and returns the list of TurndownSchedules that match those selectors.
-func (c *turndownSchedules) List(opts v1.ListOptions) (result *v1alpha1.TurndownScheduleList, err error) {
+func (c *turndownSchedules) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.TurndownScheduleList, err error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -69,13 +70,13 @@ func (c *turndownSchedules) List(opts v1.ListOptions) (result *v1alpha1.Turndown
 		Resource("turndownschedules").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Watch returns a watch.Interface that watches the requested turndownSchedules.
-func (c *turndownSchedules) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *turndownSchedules) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	var timeout time.Duration
 	if opts.TimeoutSeconds != nil {
 		timeout = time.Duration(*opts.TimeoutSeconds) * time.Second
@@ -85,81 +86,84 @@ func (c *turndownSchedules) Watch(opts v1.ListOptions) (watch.Interface, error) 
 		Resource("turndownschedules").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Watch()
+		Watch(ctx)
 }
 
 // Create takes the representation of a turndownSchedule and creates it.  Returns the server's representation of the turndownSchedule, and an error, if there is any.
-func (c *turndownSchedules) Create(turndownSchedule *v1alpha1.TurndownSchedule) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *turndownSchedules) Create(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.CreateOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	result = &v1alpha1.TurndownSchedule{}
 	err = c.client.Post().
 		Resource("turndownschedules").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(turndownSchedule).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Update takes the representation of a turndownSchedule and updates it. Returns the server's representation of the turndownSchedule, and an error, if there is any.
-func (c *turndownSchedules) Update(turndownSchedule *v1alpha1.TurndownSchedule) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *turndownSchedules) Update(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	result = &v1alpha1.TurndownSchedule{}
 	err = c.client.Put().
 		Resource("turndownschedules").
 		Name(turndownSchedule.Name).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(turndownSchedule).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-
-func (c *turndownSchedules) UpdateStatus(turndownSchedule *v1alpha1.TurndownSchedule) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *turndownSchedules) UpdateStatus(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	result = &v1alpha1.TurndownSchedule{}
 	err = c.client.Put().
 		Resource("turndownschedules").
 		Name(turndownSchedule.Name).
 		SubResource("status").
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(turndownSchedule).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }
 
 // Delete takes name of the turndownSchedule and deletes it. Returns an error if one occurs.
-func (c *turndownSchedules) Delete(name string, options *v1.DeleteOptions) error {
+func (c *turndownSchedules) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	return c.client.Delete().
 		Resource("turndownschedules").
 		Name(name).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *turndownSchedules) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
+func (c *turndownSchedules) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
 	var timeout time.Duration
-	if listOptions.TimeoutSeconds != nil {
-		timeout = time.Duration(*listOptions.TimeoutSeconds) * time.Second
+	if listOpts.TimeoutSeconds != nil {
+		timeout = time.Duration(*listOpts.TimeoutSeconds) * time.Second
 	}
 	return c.client.Delete().
 		Resource("turndownschedules").
-		VersionedParams(&listOptions, scheme.ParameterCodec).
+		VersionedParams(&listOpts, scheme.ParameterCodec).
 		Timeout(timeout).
-		Body(options).
-		Do().
+		Body(&opts).
+		Do(ctx).
 		Error()
 }
 
 // Patch applies the patch and returns the patched turndownSchedule.
-func (c *turndownSchedules) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *turndownSchedules) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.TurndownSchedule, err error) {
 	result = &v1alpha1.TurndownSchedule{}
 	err = c.client.Patch(pt).
 		Resource("turndownschedules").
-		SubResource(subresources...).
 		Name(name).
+		SubResource(subresources...).
+		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(data).
-		Do().
+		Do(ctx).
 		Into(result)
 	return
 }

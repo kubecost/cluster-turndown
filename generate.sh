@@ -1,73 +1,56 @@
-#!/bin/bash
-#
+#!/usr/bin/env bash
 
-DIR=`pwd`
-PREFIX=github.com
-PACKAGE=${PREFIX}/kubecost/cluster-turndown
-API=turndownschedule
-VERSION=v1alpha1
+set -o errexit
+set -o nounset
+set -o pipefail
 
-# Cleanup after generation
-post_clean() {
-    if [ -d "./${PREFIX}" ]; then
-        rm -rf ./${PREFIX}
-    fi
-    if [ -d "./vendor" ]; then
-        rm -rf ./vendor
-    fi
-}
 
-# Clean Generated Code
-clean_generated() {
-    if [ -d "./pkg/generated" ]; then
-        rm -rf ./pkg/generated 
-    fi
-    if [ -f "./pkg/apis/${API}/${VERSION}/zz_generated.deepcopy.go" ]; then
-        rm -f ./pkg/apis/${API}/${VERSION}/zz_generated.deepcopy.go
-    fi
-    post_clean
-}
+PACKAGE="github.com/kubecost/cluster-turndown"
+API="turndownschedule"
+VERSION="v1alpha1"
 
-# Argument processing
-clean=0
-while [[ "$#" -gt 0 ]]; do case $1 in
-  -c|--clean) clean=1; shift;;
-  *) echo "Unknown parameter passed: $1"; exit 1;;
-esac; shift; done
-
-# Always clean before generation
-clean_generated
-
-# If we're cleaning only, exit here
-if [ $clean -gt 0 ]; then
-    exit
-fi
-
-# This is hacky, but works. Since we reference generated code in our application, 
-# go mod vendor will actually complain that it doesn't know where the references are.
-# In order to pull the code-generator, we copy our go mod/sum up a directory and run
-# go mod vendor there, then move the vendor directory back to the root
-mkdir tmp
-pushd tmp
-cp ../go.mod .
-cp ../go.sum .
-cp -R ../hack .
+# Vendor so we have access to the generate-groups.sh script from the desired
+# version of k8s.io/code-generator. If vendoring breaks because code is
+# referencing generated code that has not yet been generated, refer to the
+# old version of this script (commit 5c5e172) which did a little trick to be
+# able to vendor if code was not generated.
 go mod vendor
-popd
-mv tmp/vendor .
-rm -rf tmp
 
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")
 CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo code-generator)}
 
-bash ${CODEGEN_PKG}/generate-groups.sh all \
+bash "${CODEGEN_PKG}/generate-groups.sh" all \
     ${PACKAGE}/pkg/generated \
     ${PACKAGE}/pkg/apis \
-    turndownschedule:${VERSION} \
-    --output-base "$(dirname "${BASH_SOURCE[0]}")" \
-    --go-header-file hack/custom-boilerplate.go.txt
+    ${API}:${VERSION} \
+    --go-header-file ./hack/custom-boilerplate.go.txt \
+    --output-base ${SCRIPT_ROOT}
 
+# generate-groups.sh creates files at $PACKAGE/pkg/... because of the args
+# passed in the above command. These files have to be moved to the correct
+# place afterward. Unfortunately, if we try to create the files in the right
+# location directly, like with the following:
+# bash "${CODEGEN_PKG}/generate-groups.sh" all \
+#     ./pkg/generated \
+#     ./pkg/apis \
+#     ${API}:${VERSION} \
+#     --go-header-file ./hack/custom-boilerplate.go.txt \
+#     --output-base ${SCRIPT_ROOT}
+#
+# The import statements in the generated code will be incorrect and cause
+# import errors like this:
+# pkg/generated/informers/externalversions/generic.go:9:2: local import "./pkg/apis/turndownschedule/v1alpha1" in non-local package
+#
+# So we have to generate them in ./github.com/kubecost/cluster-turndown/pkg
+# and then move them to ./pkg. Frustrating, but it does work. I believe
+# this is because the code gen was designed well before go modules and this
+# is supposed to work in the GOPATH world.
+
+# Remove old generated code first
+rm -r ./pkg/generated
+
+# Then move new generated code to the right place
 mv ./${PACKAGE}/pkg/generated ./pkg/generated
-mv ./${PACKAGE}/pkg/apis/${API}/${VERSION}/* ./pkg/apis/${API}/${VERSION}/
+mv ./${PACKAGE}/pkg/apis/${API}/${VERSION}/* ./pkg/apis/${API}/${VERSION}
 
-post_clean
+rm -r vendor

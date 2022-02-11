@@ -4,6 +4,7 @@
 package v1alpha1
 
 import (
+	"context"
 	time "time"
 
 	turndownschedulev1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
@@ -45,13 +46,13 @@ func NewFilteredTurndownScheduleInformer(client versioned.Interface, resyncPerio
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.KubecostV1alpha1().TurndownSchedules().List(options)
+				return client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.KubecostV1alpha1().TurndownSchedules().Watch(options)
+				return client.KubecostV1alpha1().TurndownSchedules().Watch(context.TODO(), options)
 			},
 		},
 		&turndownschedulev1alpha1.TurndownSchedule{},

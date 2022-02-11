@@ -4,6 +4,8 @@
 package fake
 
 import (
+	"context"
+
 	v1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
@@ -23,7 +25,7 @@ var turndownschedulesResource = schema.GroupVersionResource{Group: "kubecost.k8s
 var turndownschedulesKind = schema.GroupVersionKind{Group: "kubecost.k8s.io", Version: "v1alpha1", Kind: "TurndownSchedule"}
 
 // Get takes name of the turndownSchedule, and returns the corresponding turndownSchedule object, and an error if there is any.
-func (c *FakeTurndownSchedules) Get(name string, options v1.GetOptions) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *FakeTurndownSchedules) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootGetAction(turndownschedulesResource, name), &v1alpha1.TurndownSchedule{})
 	if obj == nil {
@@ -33,7 +35,7 @@ func (c *FakeTurndownSchedules) Get(name string, options v1.GetOptions) (result 
 }
 
 // List takes label and field selectors, and returns the list of TurndownSchedules that match those selectors.
-func (c *FakeTurndownSchedules) List(opts v1.ListOptions) (result *v1alpha1.TurndownScheduleList, err error) {
+func (c *FakeTurndownSchedules) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.TurndownScheduleList, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootListAction(turndownschedulesResource, turndownschedulesKind, opts), &v1alpha1.TurndownScheduleList{})
 	if obj == nil {
@@ -54,13 +56,13 @@ func (c *FakeTurndownSchedules) List(opts v1.ListOptions) (result *v1alpha1.Turn
 }
 
 // Watch returns a watch.Interface that watches the requested turndownSchedules.
-func (c *FakeTurndownSchedules) Watch(opts v1.ListOptions) (watch.Interface, error) {
+func (c *FakeTurndownSchedules) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
 		InvokesWatch(testing.NewRootWatchAction(turndownschedulesResource, opts))
 }
 
 // Create takes the representation of a turndownSchedule and creates it.  Returns the server's representation of the turndownSchedule, and an error, if there is any.
-func (c *FakeTurndownSchedules) Create(turndownSchedule *v1alpha1.TurndownSchedule) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *FakeTurndownSchedules) Create(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.CreateOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootCreateAction(turndownschedulesResource, turndownSchedule), &v1alpha1.TurndownSchedule{})
 	if obj == nil {
@@ -70,7 +72,7 @@ func (c *FakeTurndownSchedules) Create(turndownSchedule *v1alpha1.TurndownSchedu
 }
 
 // Update takes the representation of a turndownSchedule and updates it. Returns the server's representation of the turndownSchedule, and an error, if there is any.
-func (c *FakeTurndownSchedules) Update(turndownSchedule *v1alpha1.TurndownSchedule) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *FakeTurndownSchedules) Update(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (result *v1alpha1.TurndownSchedule, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootUpdateAction(turndownschedulesResource, turndownSchedule), &v1alpha1.TurndownSchedule{})
 	if obj == nil {
@@ -81,7 +83,7 @@ func (c *FakeTurndownSchedules) Update(turndownSchedule *v1alpha1.TurndownSchedu
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeTurndownSchedules) UpdateStatus(turndownSchedule *v1alpha1.TurndownSchedule) (*v1alpha1.TurndownSchedule, error) {
+func (c *FakeTurndownSchedules) UpdateStatus(ctx context.Context, turndownSchedule *v1alpha1.TurndownSchedule, opts v1.UpdateOptions) (*v1alpha1.TurndownSchedule, error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootUpdateSubresourceAction(turndownschedulesResource, "status", turndownSchedule), &v1alpha1.TurndownSchedule{})
 	if obj == nil {
@@ -91,22 +93,22 @@ func (c *FakeTurndownSchedules) UpdateStatus(turndownSchedule *v1alpha1.Turndown
 }
 
 // Delete takes name of the turndownSchedule and deletes it. Returns an error if one occurs.
-func (c *FakeTurndownSchedules) Delete(name string, options *v1.DeleteOptions) error {
+func (c *FakeTurndownSchedules) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
 		Invokes(testing.NewRootDeleteAction(turndownschedulesResource, name), &v1alpha1.TurndownSchedule{})
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
-func (c *FakeTurndownSchedules) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(turndownschedulesResource, listOptions)
+func (c *FakeTurndownSchedules) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
+	action := testing.NewRootDeleteCollectionAction(turndownschedulesResource, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.TurndownScheduleList{})
 	return err
 }
 
 // Patch applies the patch and returns the patched turndownSchedule.
-func (c *FakeTurndownSchedules) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.TurndownSchedule, err error) {
+func (c *FakeTurndownSchedules) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.TurndownSchedule, err error) {
 	obj, err := c.Fake.
 		Invokes(testing.NewRootPatchSubresourceAction(turndownschedulesResource, name, pt, data, subresources...), &v1alpha1.TurndownSchedule{})
 	if obj == nil {
