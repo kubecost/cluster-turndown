@@ -450,7 +450,7 @@ func (p *AWSClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 		return nil, fmt.Errorf("NodePool is not from AWS")
 	}
 
-	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	allNodes, err := p.kubernetes.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +477,7 @@ func (p *AWSClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 // the asusmption is that we're working with kops, a specific region could have many autoscaling groups,
 // so we'll need to refine the list down to the groups associated with kubernetes nodes.
 func (p *AWSClusterProvider) GetNodePools() ([]NodePool, error) {
-	nodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := p.kubernetes.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -1117,7 +1117,7 @@ func expandRange(s string) (int64, int64, int64) {
 func findAWSRegion(c kubernetes.Interface) string {
 	// Locate AWS region -- TODO: Use metadata?
 	log := logging.NamedLogger("AWSClusterProvider")
-	nodes, err := c.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		log.Err("Failed to locate AWS Region: %s", err.Error())
 		return ""

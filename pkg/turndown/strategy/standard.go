@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
@@ -45,12 +46,12 @@ func (mts *StandardTurndownStrategy) TaintKey() string {
 // label, and return the updated kubernetes Node instance.
 func (ktdm *StandardTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) {
 	// Locate the master node using role labels
-	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
+	nodeList, err := ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 		LabelSelector: MasterNodeLabelKey,
 	})
 	if err != nil || len(nodeList.Items) == 0 {
 		// Try an alternate selector in case the first fails
-		nodeList, err = ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
+		nodeList, err = ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=master", NodeRoleLabelKey),
 		})
 		if err != nil {
@@ -72,7 +73,7 @@ func (sts *StandardTurndownStrategy) UpdateDNS() error {
 	// NOTE: This needs a bit more investigation. GKE appears to overwrite any modifications to the kube-dns
 	// NOTE: deployment, so this might not actually work there. However, having to "allow" kube-dns to run on
 	// NOTE: a master node is also quite strange.
-	dns, err := sts.client.AppsV1().Deployments("kube-system").Get("kube-dns", metav1.GetOptions{})
+	dns, err := sts.client.AppsV1().Deployments("kube-system").Get(context.TODO(), "kube-dns", metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -109,12 +110,12 @@ func (sts *StandardTurndownStrategy) UpdateDNS() error {
 
 func (sts *StandardTurndownStrategy) ReverseHostNode() error {
 	// Locate the master node using role labels
-	nodeList, err := sts.client.CoreV1().Nodes().List(metav1.ListOptions{
+	nodeList, err := sts.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 		LabelSelector: MasterNodeLabelKey,
 	})
 	if err != nil || len(nodeList.Items) == 0 {
 		// Try an alternate selector in case the first fails
-		nodeList, err = sts.client.CoreV1().Nodes().List(metav1.ListOptions{
+		nodeList, err = sts.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=master", NodeRoleLabelKey),
 		})
 		if err != nil {
@@ -131,7 +132,7 @@ func (sts *StandardTurndownStrategy) ReverseHostNode() error {
 	// Patch and get the updated node
 	_, err = patcher.DeleteNodeLabel(sts.client, *masterNode, provider.TurndownNodeLabel)
 
-	dns, err := sts.client.AppsV1().Deployments("kube-system").Get("kube-dns", metav1.GetOptions{})
+	dns, err := sts.client.AppsV1().Deployments("kube-system").Get(context.TODO(), "kube-dns", metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -160,7 +161,7 @@ func (sts *StandardTurndownStrategy) ReverseHostNode() error {
 		return nil
 	})
 
-	sts.client.CoreV1().Pods("kube-system").DeleteCollection(&metav1.DeleteOptions{}, metav1.ListOptions{
+	sts.client.CoreV1().Pods("kube-system").DeleteCollection(context.TODO(), metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: "k8s-app=kube-dns",
 	})
 

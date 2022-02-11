@@ -1,12 +1,14 @@
 package patcher
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -50,7 +52,7 @@ func PatchNode(c kubernetes.Interface, node v1.Node, patch NodePatch) (*v1.Node,
 		return nil, err
 	}
 
-	return c.CoreV1().Nodes().Patch(node.Name, types.MergePatchType, p)
+	return c.CoreV1().Nodes().Patch(context.TODO(), node.Name, types.MergePatchType, p, metav1.PatchOptions{})
 }
 
 //
@@ -77,7 +79,7 @@ func PatchDeployment(c kubernetes.Interface, deployment appsv1.Deployment, patch
 		return nil, err
 	}
 
-	return c.AppsV1().Deployments(ns).Patch(name, types.MergePatchType, p)
+	return c.AppsV1().Deployments(ns).Patch(context.TODO(), name, types.MergePatchType, p, metav1.PatchOptions{})
 }
 
 //
@@ -104,7 +106,7 @@ func PatchDaemonSet(c kubernetes.Interface, daemonset appsv1.DaemonSet, patch Da
 		return nil, err
 	}
 
-	return c.AppsV1().DaemonSets(ns).Patch(name, types.MergePatchType, p)
+	return c.AppsV1().DaemonSets(ns).Patch(context.TODO(), name, types.MergePatchType, p, metav1.PatchOptions{})
 }
 
 //
@@ -131,7 +133,7 @@ func PatchCronJob(c kubernetes.Interface, cronJob v1b1.CronJob, patch CronJobPat
 		return nil, err
 	}
 
-	return c.BatchV1beta1().CronJobs(ns).Patch(name, types.MergePatchType, p)
+	return c.BatchV1beta1().CronJobs(ns).Patch(context.TODO(), name, types.MergePatchType, p, metav1.PatchOptions{})
 }
 
 //

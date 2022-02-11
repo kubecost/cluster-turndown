@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -40,7 +41,7 @@ func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.Cluster
 		return nil, fmt.Errorf("Could not create new TurndownProvider with nil ClusterProvider implementation")
 	}
 
-	nodes, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

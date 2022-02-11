@@ -72,7 +72,7 @@ func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
 		return nil, errors.New("Could not create new TurndownProvider with nil Kubernetes client")
 	}
 
-	nodes, err := client.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

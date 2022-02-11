@@ -1,6 +1,7 @@
 package turndown
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -94,19 +95,22 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 			return
 		}
 
-		_, err = te.client.KubecostV1alpha1().TurndownSchedules().Create(&v1alpha1.TurndownSchedule{
-			ObjectMeta: v1.ObjectMeta{
-				GenerateName: "scheduled-turndown-",
-				Finalizers: []string{
-					TurndownScheduleFinalizer,
+		_, err = te.client.KubecostV1alpha1().TurndownSchedules().Create(
+			context.TODO(),
+			&v1alpha1.TurndownSchedule{
+				ObjectMeta: v1.ObjectMeta{
+					GenerateName: "scheduled-turndown-",
+					Finalizers: []string{
+						TurndownScheduleFinalizer,
+					},
+				},
+				Spec: v1alpha1.TurndownScheduleSpec{
+					Start:  v1.NewTime(request.Start),
+					End:    v1.NewTime(request.End),
+					Repeat: request.Repeat,
 				},
 			},
-			Spec: v1alpha1.TurndownScheduleSpec{
-				Start:  v1.NewTime(request.Start),
-				End:    v1.NewTime(request.End),
-				Repeat: request.Repeat,
-			},
-		})
+			v1.CreateOptions{})
 		if err != nil {
 			w.Write(wrapData(nil, err))
 			return
@@ -143,7 +147,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	scheduleList, err := te.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	scheduleList, err := te.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		w.Write(wrapData(nil, err))
 		return
@@ -158,7 +162,7 @@ func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http
 	}
 
 	if toCancel != nil {
-		err = te.client.KubecostV1alpha1().TurndownSchedules().Delete(toCancel.Name, &v1.DeleteOptions{})
+		err = te.client.KubecostV1alpha1().TurndownSchedules().Delete(context.TODO(), toCancel.Name, v1.DeleteOptions{})
 		if err != nil {
 			w.Write(wrapData(nil, err))
 			return

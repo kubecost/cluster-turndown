@@ -1,6 +1,7 @@
 package turndown
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -245,7 +246,7 @@ func (c *TurndownScheduleResourceController) trySchedule(schedule *v1alpha1.Turn
 		WriteScheduleStatus(&scheduleCopy.Status, tds)
 	}
 
-	_, err = c.clientset.KubecostV1alpha1().TurndownSchedules().UpdateStatus(scheduleCopy)
+	_, err = c.clientset.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), scheduleCopy, v1.UpdateOptions{})
 	return err
 }
 
@@ -282,7 +283,7 @@ func (c *TurndownScheduleResourceController) clearFinalizer(schedule *v1alpha1.T
 
 	schedule.ObjectMeta.SetFinalizers(newFinalizers)
 
-	_, err := c.clientset.KubecostV1alpha1().TurndownSchedules().Update(schedule)
+	_, err := c.clientset.KubecostV1alpha1().TurndownSchedules().Update(context.TODO(), schedule, v1.UpdateOptions{})
 	return err
 }
 
@@ -334,7 +335,7 @@ func runPruneCompletedSchedules(interval time.Duration, maxAge time.Duration, cl
 
 // Clears failed or completed schedules over a specific age
 func clearCompletedSchedules(client clientset.Interface, maxAge time.Duration) {
-	schedules, err := client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	schedules, err := client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		return
 	}
@@ -347,7 +348,7 @@ func clearCompletedSchedules(client clientset.Interface, maxAge time.Duration) {
 		if schedule.Status.State != ScheduleStateSuccess {
 			lastUpdated := schedule.Status.LastUpdated.Time
 			if lastUpdated.Before(mustBeAfter) {
-				client.KubecostV1alpha1().TurndownSchedules().Delete(schedule.Name, &v1.DeleteOptions{})
+				client.KubecostV1alpha1().TurndownSchedules().Delete(context.TODO(), schedule.Name, v1.DeleteOptions{})
 			}
 		}
 	}
