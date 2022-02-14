@@ -10,21 +10,12 @@ RUN go mod download
 # COPY the source code as the last step
 COPY cmd/ /app/cmd
 COPY pkg/ /app/pkg
-COPY .git/ /app/.git
 
 # Build the binary
 RUN set -e ;\
-    GIT_COMMIT=`git rev-parse HEAD` ;\
-    GIT_DIRTY='' ;\
-    # for our purposes, we only care about dirty .go files ;\
-    if test -n "`git status --porcelain --untracked-files=no | grep '\.go'`"; then \
-      GIT_DIRTY='+dirty' ;\
-    fi ;\
     cd cmd/turndown;\
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -a -installsuffix cgo \
-        -ldflags "-X main.gitCommit=${GIT_COMMIT}${GIT_DIRTY}" \
-        -o /go/bin/app
+    go build -a -installsuffix cgo -o /go/bin/app
 
 FROM alpine:latest
 RUN apk add --update --no-cache ca-certificates
