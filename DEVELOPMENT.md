@@ -11,8 +11,7 @@ The script is based on https://github.com/kubernetes/sample-controller, specific
 
 ## Cutting a release
 
-1. Update the `VERSION` in the Makefile
-2. Update the image version to match in artifacts/cluster-turndown-full.yaml
-3. Build and push the new image to GCR (`make release`)
-4. Merge the changes
-5. Tag a new release off of develop for the new version
+1. Call `update-version.sh VERSION`, e.g. `./update-version.sh 1.3.0`
+2. Build and push the new image to GCR (`make release`)
+3. Merge the changes
+4. Tag a new release off of develop for the new version
