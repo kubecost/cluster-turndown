@@ -179,7 +179,7 @@ spec:
     spec:
       containers:
       - name: cluster-turndown
-        image: gcr.io/kubecost1/cluster-turndown:1.2.2
+        image: gcr.io/kubecost1/cluster-turndown:1.3.0
         volumeMounts:
         - name: turndown-keys
           mountPath: /var/keys
