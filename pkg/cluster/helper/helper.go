@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -76,7 +77,7 @@ func NodePtr(n v1.Node) *v1.Node {
 // Waits until a specific pod is deleted/evicted.
 func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(pod.Name, metav1.GetOptions{})
+		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
 		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
 			return true, nil
 		}
@@ -88,7 +89,7 @@ func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, time
 // determine if a node has been created or not.
 func WaitUntilNodeCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelValue, nodePoolName string, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		nodeList, err := client.CoreV1().Nodes().List(metav1.ListOptions{
+		nodeList, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", nodeLabelKey, nodeLabelValue),
 		})
 		for _, node := range nodeList.Items {
@@ -104,7 +105,7 @@ func WaitUntilNodeCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelVa
 // determine if a set of node has been created or not.
 func WaitUntilNodesCreated(client kubernetes.Interface, nodeLabelKey, nodeLabelValue string, nodeCount int, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		nodeList, err := client.CoreV1().Nodes().List(metav1.ListOptions{
+		nodeList, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", nodeLabelKey, nodeLabelValue),
 		})
 		if err != nil {

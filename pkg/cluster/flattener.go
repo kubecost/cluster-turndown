@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -92,7 +93,7 @@ func (d *Flattener) Expand() error {
 
 // Test to determine if any of the cluster components have been flattened.
 func (d *Flattener) IsClusterFlattened() bool {
-	deployments, err := d.client.AppsV1().Deployments("").List(metav1.ListOptions{})
+	deployments, err := d.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		d.log.Warn("Failed to fetch deployments: %s", err.Error())
 	} else {
@@ -116,7 +117,7 @@ func (d *Flattener) IsClusterFlattened() bool {
 		}
 	}
 
-	daemonSets, err := d.client.AppsV1().DaemonSets("").List(metav1.ListOptions{})
+	daemonSets, err := d.client.AppsV1().DaemonSets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		d.log.Warn("Failed to fetch daemonsets: %s", err.Error())
 	} else {
@@ -131,7 +132,7 @@ func (d *Flattener) IsClusterFlattened() bool {
 		}
 	}
 
-	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
+	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		d.log.Warn("Failed to fetch jobs: %s", err.Error())
 	} else {
@@ -161,7 +162,7 @@ func (d *Flattener) isOmitted(deployment *appsv1.Deployment) bool {
 }
 
 func (d *Flattener) FlattenDeployments() error {
-	deployments, err := d.client.AppsV1().Deployments("").List(metav1.ListOptions{})
+	deployments, err := d.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -181,7 +182,7 @@ func (d *Flattener) FlattenDeployments() error {
 }
 
 func (d *Flattener) FlattenDaemonSets() error {
-	daemonSets, err := d.client.AppsV1().DaemonSets("").List(metav1.ListOptions{})
+	daemonSets, err := d.client.AppsV1().DaemonSets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -197,7 +198,7 @@ func (d *Flattener) FlattenDaemonSets() error {
 }
 
 func (d *Flattener) SuspendJobs() error {
-	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
+	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -343,7 +344,7 @@ func (d *Flattener) ResumeJob(cronJob v1b1.CronJob) error {
 }
 
 func (d *Flattener) ExpandDeployments() error {
-	deployments, err := d.client.AppsV1().Deployments("").List(metav1.ListOptions{})
+	deployments, err := d.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -363,7 +364,7 @@ func (d *Flattener) ExpandDeployments() error {
 }
 
 func (d *Flattener) ExpandDaemonSets() error {
-	daemonSets, err := d.client.AppsV1().DaemonSets("").List(metav1.ListOptions{})
+	daemonSets, err := d.client.AppsV1().DaemonSets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -379,7 +380,7 @@ func (d *Flattener) ExpandDaemonSets() error {
 }
 
 func (d *Flattener) ResumeJobs() error {
-	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(metav1.ListOptions{})
+	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}

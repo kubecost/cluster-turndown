@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -76,7 +77,7 @@ func (d *Draininator) Drain() error {
 func (d *Draininator) CordonNode() error {
 	d.log.SLog("Cordoning Node: %s", d.node)
 
-	node, err := d.client.CoreV1().Nodes().Get(d.node, metav1.GetOptions{})
+	node, err := d.client.CoreV1().Nodes().Get(context.TODO(), d.node, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -133,7 +134,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 	listOptions := metav1.ListOptions{
 		FieldSelector: podNodeSelector(d.node),
 	}
-	allPods, err := d.client.CoreV1().Pods(metav1.NamespaceAll).List(listOptions)
+	allPods, err := d.client.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), listOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +183,7 @@ func (d *Draininator) daemonSetFilter(pod v1.Pod) (bool, error) {
 	}
 
 	// Check to see if that controller is a daemonset
-	if _, err := d.client.AppsV1().DaemonSets(pod.Namespace).Get(controllerRef.Name, metav1.GetOptions{}); err != nil {
+	if _, err := d.client.AppsV1().DaemonSets(pod.Namespace).Get(context.TODO(), controllerRef.Name, metav1.GetOptions{}); err != nil {
 		if k8serrors.IsNotFound(err) && d.force {
 			d.log.Debug("pod %s.%s is controlled by a DaemonSet but the DaemonSet is not found", pod.Namespace, pod.Name)
 			return true, nil
@@ -313,7 +314,7 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 	wc.Add(len(pods))
 
 	for _, pod := range pods {
-		err := d.client.CoreV1().Pods(pod.Namespace).Delete(pod.Name, &metav1.DeleteOptions{
+		err := d.client.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{
 			GracePeriodSeconds: &d.gracePeriodSeconds,
 		})
 		if err != nil && !k8serrors.IsNotFound(err) {
@@ -372,7 +373,7 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 			// Attempt to evict the pod, retrying if TooManyRequests received
 			for {
 				eviction := podEvictionFor(&pod, policyGroupVersion, d.gracePeriodSeconds)
-				err = d.client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(eviction)
+				err = d.client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(context.TODO(), eviction)
 				if err == nil {
 					break
 				}

@@ -129,7 +129,7 @@ func (p *EKSClusterProvider) GetNodePoolName(node *v1.Node) string {
 func (p *EKSClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 	name := np.Name()
 
-	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	allNodes, err := p.kubernetes.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +511,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 		return fmt.Errorf("NODE_NAME env variable was not set.")
 	}
 
-	currentNode, err := p.kubernetes.CoreV1().Nodes().Get(currentNodeName, metav1.GetOptions{})
+	currentNode, err := p.kubernetes.CoreV1().Nodes().Get(context.TODO(), currentNodeName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package turndown
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -74,7 +75,7 @@ func WriteScheduleStatus(status *v1alpha1.TurndownScheduleStatus, schedule *Sche
 }
 
 func (kss *KubernetesScheduleStore) GetSchedule() (*Schedule, error) {
-	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +99,7 @@ func (kss *KubernetesScheduleStore) Create(schedule *Schedule) error {
 }
 
 func (kss *KubernetesScheduleStore) Update(schedule *Schedule) error {
-	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -108,7 +109,7 @@ func (kss *KubernetesScheduleStore) Update(schedule *Schedule) error {
 			tdCopy := td.DeepCopy()
 			WriteScheduleStatus(&tdCopy.Status, schedule)
 
-			_, err := kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(tdCopy)
+			_, err := kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
 			return err
 		}
 	}
@@ -117,7 +118,7 @@ func (kss *KubernetesScheduleStore) Update(schedule *Schedule) error {
 }
 
 func (kss *KubernetesScheduleStore) Complete() {
-	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		return
 	}
@@ -128,14 +129,14 @@ func (kss *KubernetesScheduleStore) Complete() {
 			tdCopy.Status.State = ScheduleStateCompleted
 			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
-			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(tdCopy)
+			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
 			return
 		}
 	}
 }
 
 func (kss *KubernetesScheduleStore) Clear() {
-	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(v1.ListOptions{})
+	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		return
 	}
@@ -146,7 +147,7 @@ func (kss *KubernetesScheduleStore) Clear() {
 			tdCopy.Status.State = ScheduleStateCompleted
 			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
-			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(tdCopy)
+			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
 			return
 		}
 	}

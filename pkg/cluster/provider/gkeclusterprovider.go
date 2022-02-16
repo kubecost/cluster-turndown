@@ -148,7 +148,7 @@ func (p *GKEClusterProvider) GetNodePoolName(node *v1.Node) string {
 func (p *GKEClusterProvider) GetNodesFor(np NodePool) ([]*v1.Node, error) {
 	name := np.Name()
 
-	allNodes, err := p.kubernetes.CoreV1().Nodes().List(metav1.ListOptions{})
+	allNodes, err := p.kubernetes.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}

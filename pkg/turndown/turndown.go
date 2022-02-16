@@ -1,6 +1,7 @@
 package turndown
 
 import (
+	"context"
 	"os"
 
 	"github.com/kubecost/cluster-turndown/pkg/cluster"
@@ -74,7 +75,7 @@ func (ktdm *KubernetesTurndownManager) IsScaledDown() bool {
 }
 
 func (ktdm *KubernetesTurndownManager) IsRunningOnTurndownNode() (bool, error) {
-	nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
+	nodeList, err := ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 		LabelSelector: provider.TurndownNodeLabelSelector,
 	})
 	if err != nil {
@@ -122,7 +123,7 @@ func (ktdm *KubernetesTurndownManager) PrepareTurndownEnvironment() error {
 	ktdm.log.Log("Applying Tolerations and Node Selector to turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -151,7 +152,7 @@ func (ktdm *KubernetesTurndownManager) ScaleDownCluster() error {
 	ktdm.log.Log("Scaling Down Cluster Now")
 
 	// 1. Start by finding all the nodes that Kubernetes is using
-	nodes, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{})
+	nodes, err := ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
@@ -350,7 +351,7 @@ func (ktdm *KubernetesTurndownManager) ResetTurndownEnvironment() error {
 	ktdm.log.Log("Reversing Tolerations and Node Selector on turndown deployment...")
 
 	// Modify the Deployment for the Current Turndown Pod to include a node selector
-	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(deploymentName, metav1.GetOptions{})
+	deployment, err := ktdm.client.AppsV1().Deployments(ns).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}

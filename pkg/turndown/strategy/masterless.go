@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
@@ -86,7 +87,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		}
 
 		// Lookup the turndown node in the kubernetes API
-		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{
+		nodeList, err := ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{
 			LabelSelector: provider.TurndownNodeLabelSelector,
 		})
 		if err != nil {
@@ -95,7 +96,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 		tnode = &nodeList.Items[0]
 	} else {
 		// Otherwise, have the current pod move to autoscaling node pool
-		nodeList, err := ktdm.client.CoreV1().Nodes().List(metav1.ListOptions{})
+		nodeList, err := ktdm.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
