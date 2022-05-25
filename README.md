@@ -130,7 +130,7 @@ $ kubectl create secret generic cluster-turndown-service-key -n turndown --from-
 After completing setup, run the following command to get the `cluster-turndown` pod running on your cluster:
 
 ```bash
-$ kubectl apply -f https://github.com/kubecost/cluster-turndown/releases/latest/download/cluster-turndown-full.yaml
+$ kubectl apply -f artifacts/cluster-turndown-full.yaml
 ```
 
 In this yaml, you'll find the definitions for the following:
