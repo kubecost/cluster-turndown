@@ -14,4 +14,5 @@ The script is based on https://github.com/kubernetes/sample-controller, specific
 1. Call `update-version.sh VERSION`, e.g. `./update-version.sh 1.3.0`
 2. Build and push the new image to GCR (`make release`)
 3. Merge the changes
-4. Tag a new release off of develop for the new version
+4. Tag a new release off of `develop` for the new version
+5. Manually upload `artifacts/cluster-turndown-full.yaml` and `scripts/gke-create-service-key.sh` to the GitHub Release created by the tag
