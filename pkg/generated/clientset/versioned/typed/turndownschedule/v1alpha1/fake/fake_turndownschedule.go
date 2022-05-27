@@ -20,9 +20,9 @@ type FakeTurndownSchedules struct {
 	Fake *FakeKubecostV1alpha1
 }
 
-var turndownschedulesResource = schema.GroupVersionResource{Group: "kubecost.k8s.io", Version: "v1alpha1", Resource: "turndownschedules"}
+var turndownschedulesResource = schema.GroupVersionResource{Group: "kubecost.com", Version: "v1alpha1", Resource: "turndownschedules"}
 
-var turndownschedulesKind = schema.GroupVersionKind{Group: "kubecost.k8s.io", Version: "v1alpha1", Kind: "TurndownSchedule"}
+var turndownschedulesKind = schema.GroupVersionKind{Group: "kubecost.com", Version: "v1alpha1", Kind: "TurndownSchedule"}
 
 // Get takes name of the turndownSchedule, and returns the corresponding turndownSchedule object, and an error if there is any.
 func (c *FakeTurndownSchedules) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.TurndownSchedule, err error) {
