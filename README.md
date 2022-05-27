@@ -1,6 +1,8 @@
 # Cluster Turndown
 Cluster Turndown is an automated scaledown and scaleup of a Kubernetes cluster's backing nodes based on a custom schedule and turndown criteria. This feature can be used to reduce spend during down hours and/or reduce surface area for security reasons. The most common use case is to scale non-prod environments (e.g. dev clusters) to zero during off hours. The project currently suppoorts clusters on GKE, EKS, and kops on AWS. 
 
+> :warning: If you are upgrading from a pre-2.0.0 version of cluster-turndown, you will have to migrate your custom resources. `turndownschedules.kubecost.k8s.io` has been changed to `turndownschedules.kubecost.com` and `finalizers.kubecost.k8s.io` has been changed to `finalizers.kubecost.com`. See https://github.com/kubecost/cluster-turndown/pull/44 for an explanation. :warning:
+
 **Note: Cluster Turndown is currently in _ALPHA_**
 
 ### GKE Setup
