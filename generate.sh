@@ -5,7 +5,7 @@ set -o nounset
 set -o pipefail
 
 
-PACKAGE="github.com/kubecost/cluster-turndown"
+PACKAGE="github.com/kubecost/cluster-turndown/v2"
 API="turndownschedule"
 VERSION="v1alpha1"
 
@@ -41,7 +41,7 @@ bash "${CODEGEN_PKG}/generate-groups.sh" all \
 # import errors like this:
 # pkg/generated/informers/externalversions/generic.go:9:2: local import "./pkg/apis/turndownschedule/v1alpha1" in non-local package
 #
-# So we have to generate them in ./github.com/kubecost/cluster-turndown/pkg
+# So we have to generate them in ./github.com/kubecost/cluster-turndown/v2/pkg
 # and then move them to ./pkg. Frustrating, but it does work. I believe
 # this is because the code gen was designed well before go modules and this
 # is supposed to work in the GOPATH world.

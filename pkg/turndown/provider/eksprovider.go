@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"

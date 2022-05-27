@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
-	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"

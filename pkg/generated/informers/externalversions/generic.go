@@ -6,7 +6,7 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
+	v1alpha1 "github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
-	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"

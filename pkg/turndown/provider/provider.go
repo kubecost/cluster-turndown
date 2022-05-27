@@ -8,7 +8,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

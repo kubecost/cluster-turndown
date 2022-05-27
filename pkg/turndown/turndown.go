@@ -4,12 +4,12 @@ import (
 	"context"
 	"os"
 
-	"github.com/kubecost/cluster-turndown/pkg/cluster"
-	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/strategy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

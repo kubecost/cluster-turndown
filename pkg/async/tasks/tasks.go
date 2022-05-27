@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 
 	"k8s.io/klog"
 )

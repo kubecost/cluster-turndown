@@ -5,7 +5,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule"
+	"github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule"
 )
 
 // SchemeGroupVersion is group version used to register these objects
