@@ -41,7 +41,7 @@ const (
 	// due to an existing turndown schedule.
 	ErrAlreadyScheduled = "ErrAlreadyScheduled"
 
-	TurndownScheduleFinalizer = "finalizer.kubecost.k8s.io"
+	TurndownScheduleFinalizer = "finalizer.kubecost.com"
 
 	ScheduleStateSuccess   = "ScheduleSuccess"
 	ScheduleStateFailed    = "ScheduleFailed"

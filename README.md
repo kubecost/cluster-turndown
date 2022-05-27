@@ -152,12 +152,12 @@ $ kubectl get pods -l app=cluster-turndown -n turndown
 Cluster Turndown uses a Kubernetes Custom Resource Definition to create schedules. There is an example resource located at `artifacts/example-schedule.yaml`:
 
 ```yaml
-apiVersion: kubecost.k8s.io/v1alpha1
+apiVersion: kubecost.com/v1alpha1
 kind: TurndownSchedule
 metadata:
   name: example-schedule
   finalizers:
-  - "finalizer.kubecost.k8s.io"
+  - "finalizer.kubecost.com"
 spec:
   start: 2020-03-12T00:00:00Z
   end: 2020-03-12T12:00:00Z
@@ -201,19 +201,19 @@ Details regarding the status of the turndown schedule can be found by outputting
 ```bash
 $ kubectl get tds example-schedule -o yaml
 
-apiVersion: kubecost.k8s.io/v1alpha1
+apiVersion: kubecost.com/v1alpha1
 kind: TurndownSchedule
 metadata:
   annotations:
     kubectl.kubernetes.io/last-applied-configuration: |
-      {"apiVersion":"kubecost.k8s.io/v1alpha1","kind":"TurndownSchedule","metadata":{"annotations":{},"finalizers":["finalizer.kubecost.k8s.io"],"name":"example-schedule"},"spec":{"end":"2020-03-17T00:35:00Z","repeat":"daily","start":"2020-03-17T00:20:00Z"}}
+      {"apiVersion":"kubecost.com/v1alpha1","kind":"TurndownSchedule","metadata":{"annotations":{},"finalizers":["finalizer.kubecost.com"],"name":"example-schedule"},"spec":{"end":"2020-03-17T00:35:00Z","repeat":"daily","start":"2020-03-17T00:20:00Z"}}
   creationTimestamp: "2020-03-17T00:18:39Z"
   finalizers:
-  - finalizer.kubecost.k8s.io
+  - finalizer.kubecost.com
   generation: 1
   name: example-schedule
   resourceVersion: "33573"
-  selfLink: /apis/kubecost.k8s.io/v1alpha1/turndownschedules/example-schedule
+  selfLink: /apis/kubecost.com/v1alpha1/turndownschedules/example-schedule
   uid: d9b16aed-67e4-11ea-b591-42010a8e0075
 spec:
   end: "2020-03-17T00:35:00Z"

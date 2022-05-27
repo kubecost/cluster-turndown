@@ -14,7 +14,7 @@ type KubecostV1alpha1Interface interface {
 	TurndownSchedulesGetter
 }
 
-// KubecostV1alpha1Client is used to interact with features provided by the kubecost.k8s.io group.
+// KubecostV1alpha1Client is used to interact with features provided by the kubecost.com group.
 type KubecostV1alpha1Client struct {
 	restClient rest.Interface
 }
