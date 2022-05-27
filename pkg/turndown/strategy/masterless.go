@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

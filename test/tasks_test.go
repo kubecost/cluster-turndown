@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async/tasks"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async/tasks"
 )
 
 /*

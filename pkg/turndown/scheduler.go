@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 
 	"github.com/google/uuid"
 	"k8s.io/klog"

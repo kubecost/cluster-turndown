@@ -8,10 +8,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/file"
+	"github.com/kubecost/cluster-turndown/v2/pkg/file"
 
-	"github.com/kubecost/cluster-turndown/pkg/apis/turndownschedule/v1alpha1"
-	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
+	"github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule/v1alpha1"
+	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

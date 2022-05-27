@@ -12,15 +12,15 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	clientset "github.com/kubecost/cluster-turndown/pkg/generated/clientset/versioned"
-	informers "github.com/kubecost/cluster-turndown/pkg/generated/informers/externalversions"
+	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
+	informers "github.com/kubecost/cluster-turndown/v2/pkg/generated/informers/externalversions"
 
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
 
-	"github.com/kubecost/cluster-turndown/pkg/signals"
-	"github.com/kubecost/cluster-turndown/pkg/turndown"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/strategy"
+	"github.com/kubecost/cluster-turndown/v2/pkg/signals"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/strategy"
 
 	"k8s.io/klog"
 )

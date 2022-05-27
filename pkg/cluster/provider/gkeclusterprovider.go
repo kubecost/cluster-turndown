@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
-	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/pkg/file"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
+	"github.com/kubecost/cluster-turndown/v2/pkg/file"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

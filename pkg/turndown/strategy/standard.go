@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
-	"github.com/kubecost/cluster-turndown/pkg/turndown/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
+	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"

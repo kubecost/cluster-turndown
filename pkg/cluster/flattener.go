@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/kubecost/cluster-turndown/pkg/cluster/patcher"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"

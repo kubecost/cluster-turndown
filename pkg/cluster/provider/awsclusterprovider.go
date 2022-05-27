@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/pkg/file"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
+	"github.com/kubecost/cluster-turndown/v2/pkg/file"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

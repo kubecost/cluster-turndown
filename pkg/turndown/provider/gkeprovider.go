@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/pkg/async"
-	cp "github.com/kubecost/cluster-turndown/pkg/cluster/provider"
-	"github.com/kubecost/cluster-turndown/pkg/logging"
+	"github.com/kubecost/cluster-turndown/v2/pkg/async"
+	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
+	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
