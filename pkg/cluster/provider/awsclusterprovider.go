@@ -17,18 +17,19 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
 	"github.com/kubecost/cluster-turndown/v2/pkg/file"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/s3"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -278,13 +279,13 @@ func (p *AWSClusterData) getKeyName() string {
 func (p *AWSClusterData) updateUserData(userData *string) {
 	data := aws.StringValue(userData)
 	if data == "" {
-		klog.Infof("[Warning] Failed to update user data. String was empty!")
+		log.Warn().Msg("Failed to update user data. String was empty!")
 		return
 	}
 
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
-		klog.Infof("[Warning] Failed to decode base64 user data: %s", err.Error())
+		log.Warn().Msgf("Failed to decode base64 user data: %s", err.Error())
 		return
 	}
 
@@ -308,7 +309,7 @@ func (p *AWSClusterData) updateUserData(userData *string) {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
-				klog.V(1).Infof("Failed to read user data: %s", err.Error())
+				log.Error().Msgf("Failed to read user data: %s", err.Error())
 				return
 			}
 
@@ -391,7 +392,7 @@ type AWSClusterProvider struct {
 	ec2Client      *ec2.EC2
 	s3Client       *s3.S3
 	clusterData    *AWSClusterData
-	log            logging.NamedLogger
+	log            zerolog.Logger
 }
 
 // NewAWSClusterProvider creates a new AWSClusterProvider instance as the ClusterProvider
@@ -408,7 +409,7 @@ func NewAWSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 		ec2Client:      ec2Client,
 		s3Client:       s3Client,
 		clusterData:    newAWSClusterData(),
-		log:            logging.NamedLogger("AWSClusterProvider"),
+		log:            log.With().Str("component", "AWSClusterProvider").Logger(),
 	}, nil
 }
 
@@ -702,7 +703,7 @@ func (p *AWSClusterProvider) UpdateNodePoolSize(c context.Context, nodePool Node
 
 	_, err := p.clusterManager.UpdateAutoScalingGroupWithContext(c, update)
 	if err != nil {
-		p.log.Err("Updating AutoScalingGroup: %s", err.Error())
+		p.log.Error().Msgf("Updating AutoScalingGroup: %s", err.Error())
 		return err
 	}
 
@@ -925,9 +926,9 @@ func (p *AWSClusterProvider) createLaunchConfiguration(name, machineType string,
 		})
 		if err != nil || len(lcs.LaunchConfigurations) == 0 {
 			if err != nil {
-				p.log.Warn("Error: %s", err.Error())
+				p.log.Warn().Msgf("Error Describing Launch Configurations: %s", err.Error())
 			}
-			p.log.Warn("Failed to retrieve newly created LaunchConfiguration. Retrying...")
+			p.log.Warn().Msg("Failed to retrieve newly created LaunchConfiguration. Retrying...")
 
 			time.Sleep(5 * time.Second)
 			continue
@@ -980,7 +981,7 @@ func (p *AWSClusterProvider) imageLocationFor(imageID *string) *string {
 		ImageIds: []*string{imageID},
 	})
 	if err != nil || len(di.Images) == 0 {
-		p.log.Err("Image Location: %s", err.Error())
+		p.log.Error().Msgf("Image Location: %s", err.Error())
 		return nil
 	}
 
@@ -1032,7 +1033,7 @@ func newAWSClusterManager(region string) (*autoscaling.AutoScaling, *ec2.EC2, *s
 		os.Setenv(AWSAccessKeyID, accessKey.AccessKeyID)
 		os.Setenv(AWSSecretAccessKey, accessKey.SecretAccessKey)
 	} else {
-		klog.Infof("[Warning] Failed to load valid access key from secret. Err=%s", err)
+		log.Warn().Msgf("Failed to load valid access key from secret. Err=%s", err)
 	}
 
 	c := aws.NewConfig().
@@ -1090,24 +1091,24 @@ func flatRange(min, max, count int32) *string {
 }
 
 func expandRange(s string) (int64, int64, int64) {
-	log := logging.NamedLogger("AWSClusterProvider")
+	log := log.With().Str("component", "AWSClusterProvider").Logger()
 	values := strings.Split(s, "/")
 
 	count, err := strconv.Atoi(values[2])
 	if err != nil {
-		log.Err("Parsing Count: %s", err.Error())
+		log.Error().Msgf("Parsing Count: %s", err.Error())
 		return -1, -1, -1
 	}
 
 	min, err := strconv.Atoi(values[0])
 	if err != nil {
-		log.Err("Parsing Min: %s", err.Error())
+		log.Error().Msgf("Parsing Min: %s", err.Error())
 		min = count
 	}
 
 	max, err := strconv.Atoi(values[1])
 	if err != nil {
-		log.Err("Parsing Max: %s", err.Error())
+		log.Error().Msgf("Parsing Max: %s", err.Error())
 		max = count
 	}
 
@@ -1116,15 +1117,14 @@ func expandRange(s string) (int64, int64, int64) {
 
 func findAWSRegion(c kubernetes.Interface) string {
 	// Locate AWS region -- TODO: Use metadata?
-	log := logging.NamedLogger("AWSClusterProvider")
 	nodes, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		log.Err("Failed to locate AWS Region: %s", err.Error())
+		log.Error().Msgf("Failed to locate AWS Region: %s", err.Error())
 		return ""
 	}
 
 	if len(nodes.Items) == 0 {
-		log.Err("Failed to locate any kubernetes nodes.")
+		log.Error().Msg("Failed to locate any kubernetes nodes.")
 		return ""
 	}
 

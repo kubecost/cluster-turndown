@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,7 +21,8 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/strategy"
 
-	"k8s.io/klog"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // Run web server with turndown endpoints
@@ -34,7 +34,7 @@ func runWebServer(kubeClient kubernetes.Interface, client clientset.Interface, s
 	mux.HandleFunc("/schedule", endpoints.HandleStartSchedule)
 	mux.HandleFunc("/cancel", endpoints.HandleCancelSchedule)
 
-	klog.Fatal(http.ListenAndServe(":9731", mux))
+	log.Fatal().Msgf("%s", http.ListenAndServe(":9731", mux))
 }
 
 // Initialize Kubernetes Client as well as the CRD Client
@@ -50,7 +50,7 @@ func initKubernetes(isLocal bool) (kubernetes.Interface, clientset.Interface, er
 		}
 
 		configFile := filepath.Join(homeDir, ".kube", "config")
-		klog.V(3).Infof("KubeConfig Path: %s", configFile)
+		log.Info().Msgf("KubeConfig Path: %s", configFile)
 
 		kc, err = clientcmd.BuildConfigFromFlags("", configFile)
 		if err != nil {
@@ -85,7 +85,7 @@ func runTurndownResourceController(kubeClient kubernetes.Interface, tdClient cli
 
 	go func(c *turndown.TurndownScheduleResourceController, s <-chan struct{}) {
 		if err := c.Run(1, s); err != nil {
-			klog.Fatalf("Error running controller: %s", err.Error())
+			log.Fatal().Msgf("Error running controller: %s", err.Error())
 		}
 	}(controller, stopCh)
 }
@@ -108,19 +108,20 @@ func strategyForProvider(c kubernetes.Interface, p provider.TurndownProvider) (s
 }
 
 func main() {
-	klog.InitFlags(nil)
-	flag.Set("v", "3")
-	flag.Parse()
+	zerolog.TimeFieldFormat = time.RFC3339
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	// TODO: Make configurable
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	stopCh := signals.SetupSignalHandler()
 
 	node := os.Getenv("NODE_NAME")
-	klog.V(1).Infof("Running Kubecost Turndown on: %s", node)
+	log.Info().Msgf("Running Kubecost Turndown on: %s", node)
 
 	// Setup Components
 	kubeClient, tdClient, err := initKubernetes(false)
 	if err != nil {
-		klog.Fatalf("Failed to initialize kubernetes client: %s", err.Error())
+		log.Fatal().Msgf("Failed to initialize kubernetes client: %s", err.Error())
 	}
 
 	// Schedule Persistence via Kubernetes Custom Resource Definition
@@ -130,28 +131,28 @@ func main() {
 	// Platform Provider API
 	clusterProvider, err := cp.NewClusterProvider(kubeClient)
 	if err != nil {
-		klog.V(1).Infof("[Error]: Failed to create ClusterProvider: %s", err.Error())
+		log.Error().Msgf("Failed to create ClusterProvider: %s", err.Error())
 		return
 	}
 
 	// Turndown Provider API
 	turndownProvider, err := provider.NewTurndownProvider(kubeClient, clusterProvider)
 	if err != nil {
-		klog.V(1).Infof("[Error]: Failed to determine provider: %s", err.Error())
+		log.Error().Msgf("Failed to determine provider: %s", err.Error())
 		return
 	}
 
 	// Validate TurndownProvider
 	err = provider.Validate(turndownProvider, 5)
 	if err != nil {
-		klog.V(1).Infof("[Error]: Failed to validate provider: %s", err.Error())
+		log.Error().Msgf("[Error]: Failed to validate provider: %s", err.Error())
 		return
 	}
 
 	// Determine the best turndown strategy to use based on provider
 	strategy, err := strategyForProvider(kubeClient, turndownProvider)
 	if err != nil {
-		klog.V(1).Infof("Failed to create strategy: %s", err.Error())
+		log.Error().Msgf("Failed to create strategy: %s", err.Error())
 		return
 	}
 

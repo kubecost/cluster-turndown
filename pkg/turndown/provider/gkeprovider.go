@@ -7,10 +7,12 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -22,7 +24,7 @@ type GKEProvider struct {
 	kubernetes      kubernetes.Interface
 	clusterProvider cp.ClusterProvider
 	metadata        *cp.GKEMetaData
-	log             logging.NamedLogger
+	log             zerolog.Logger
 }
 
 func NewGKEProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
@@ -30,7 +32,7 @@ func NewGKEProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterP
 		kubernetes:      kubernetes,
 		clusterProvider: clusterProvider,
 		metadata:        cp.NewGKEMetaData(),
-		log:             logging.NamedLogger("GKEProvider"),
+		log:             log.With().Str("component", "GKEProvider").Logger(),
 	}
 }
 
@@ -78,11 +80,11 @@ func (p *GKEProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 
 			err := p.clusterProvider.UpdateNodePoolSize(ctx, nodePool, nodePool.NodeCount())
 			if err != nil {
-				p.log.Log("[Error] Failed to resize NodePool: %s", nodePool.Name())
+				p.log.Error().Msgf("Failed to resize NodePool: %s", nodePool.Name())
 				return
 			}
 
-			p.log.Log("Resized NodePool Successfully: %s", nodePool.Name())
+			p.log.Info().Msgf("Resized NodePool Successfully: %s", nodePool.Name())
 		}(np)
 	}
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/klog"
+	"github.com/rs/zerolog/log"
 )
 
 // The purpose of validation is currently to check whether or not the supplied authentication
@@ -22,13 +22,13 @@ func validateProvider(provider TurndownProvider, maxRetries int, done chan<- err
 				return
 			}
 
-			klog.Infof("[Error]: Cannot locate any node groups from provider.")
+			log.Error().Msgf("Cannot locate any node groups from provider.")
 		} else {
-			klog.Infof("[Error]: Failed to load node groups: %s", err.Error())
+			log.Error().Msgf("Failed to load node groups: %s", err.Error())
 		}
 
 		if retries != (maxRetries - 1) {
-			klog.Infof("Retrying (%d remaining) in %d seconds...", maxRetries-retries-1, int64(interval.Seconds()))
+			log.Info().Msgf("Retrying (%d remaining) in %d seconds...", maxRetries-retries-1, int64(interval.Seconds()))
 			time.Sleep(interval)
 		}
 	}
@@ -38,7 +38,7 @@ func validateProvider(provider TurndownProvider, maxRetries int, done chan<- err
 
 // Validate will return an error if the validation on a ComputeProvider fails
 func Validate(provider TurndownProvider, maxRetries int) error {
-	klog.Infof("Validating Provider...")
+	log.Info().Msg("Validating Provider...")
 
 	done := make(chan error, 1)
 	go validateProvider(provider, maxRetries, done)

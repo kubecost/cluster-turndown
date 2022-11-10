@@ -11,7 +11,6 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1beta1"
@@ -20,6 +19,9 @@ import (
 
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // Draininator is the type used to drain a specific kubernetes node. Much like
@@ -35,7 +37,7 @@ type Draininator struct {
 	ignoreDaemonSets   bool
 	deleteLocalData    bool
 	ignorePods         []string
-	log                logging.NamedLogger
+	log                zerolog.Logger
 }
 
 // PodFilter definition which is used to determine which pods to evict from a node.
@@ -53,13 +55,13 @@ func NewDraininator(client kubernetes.Interface, node string, ignorePods []strin
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
 		ignorePods:         ignorePods,
-		log:                logging.NamedLogger("Draininator"),
+		log:                log.With().Str("component", "Draininator").Logger(),
 	}
 }
 
 // Cordons the node, then evicts pods from the node that qualify.
 func (d *Draininator) Drain() error {
-	d.log.Log("Draining Node: %s", d.node)
+	d.log.Info().Msgf("Draining Node: %s", d.node)
 	err := d.CordonNode()
 	if err != nil {
 		return err
@@ -70,12 +72,12 @@ func (d *Draininator) Drain() error {
 		return err
 	}
 
-	d.log.Log("Node: %s was Drained Successfully", d.node)
+	d.log.Info().Msgf("Node: %s was Drained Successfully", d.node)
 	return nil
 }
 
 func (d *Draininator) CordonNode() error {
-	d.log.SLog("Cordoning Node: %s", d.node)
+	d.log.Info().Msgf("  Cordoning Node: %s", d.node)
 
 	node, err := d.client.CoreV1().Nodes().Get(context.TODO(), d.node, metav1.GetOptions{})
 	if err != nil {
@@ -101,11 +103,11 @@ func (d *Draininator) DeletePodsOnNode() error {
 	}
 
 	if pods == nil || len(pods) == 0 {
-		d.log.SLog("There are no pods to evict on the drained node.")
+		d.log.Info().Msg("  There are no pods to evict on the drained node.")
 		return nil
 	}
 
-	d.log.SLog("Found %d pods to be deleted...", len(pods))
+	d.log.Info().Msgf("  Found %d pods to be deleted...", len(pods))
 
 	policyGroupVersion, err := IsEvictionAvailable(d.client)
 	if err != nil {
@@ -185,7 +187,7 @@ func (d *Draininator) daemonSetFilter(pod v1.Pod) (bool, error) {
 	// Check to see if that controller is a daemonset
 	if _, err := d.client.AppsV1().DaemonSets(pod.Namespace).Get(context.TODO(), controllerRef.Name, metav1.GetOptions{}); err != nil {
 		if k8serrors.IsNotFound(err) && d.force {
-			d.log.Debug("pod %s.%s is controlled by a DaemonSet but the DaemonSet is not found", pod.Namespace, pod.Name)
+			d.log.Info().Msgf("pod %s.%s is controlled by a DaemonSet but the DaemonSet is not found", pod.Namespace, pod.Name)
 			return true, nil
 		}
 		return false, err
@@ -195,14 +197,14 @@ func (d *Draininator) daemonSetFilter(pod v1.Pod) (bool, error) {
 		return false, fmt.Errorf("pod %s.%s is controlled by a DaemonSet, node cannot be drained.", pod.Namespace, pod.Name)
 	}
 
-	d.log.SLog("Pod %s.%s is controlled by a DaemonSet. Ignoring.", pod.Namespace, pod.Name)
+	d.log.Info().Msgf("  Pod %s.%s is controlled by a DaemonSet. Ignoring.", pod.Namespace, pod.Name)
 	return false, nil
 }
 
 // PodFilter to determine which pods are kube system mirrors
 func (d *Draininator) mirrorFilter(pod v1.Pod) (bool, error) {
 	if _, found := pod.ObjectMeta.Annotations[v1.MirrorPodAnnotationKey]; found {
-		d.log.Debug("%s.%s is a mirror pod, it won't be deleted", pod.Namespace, pod.Name)
+		d.log.Info().Msgf("%s.%s is a mirror pod, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
 	}
 	return true, nil
@@ -212,7 +214,7 @@ func (d *Draininator) mirrorFilter(pod v1.Pod) (bool, error) {
 func (d *Draininator) autoscalerFilter(pod v1.Pod) (bool, error) {
 	enabled, found := pod.ObjectMeta.Annotations["cluster-autoscaler.kubernetes.io/safe-to-evict"]
 	if found && enabled == "false" {
-		d.log.Debug("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
+		d.log.Info().Msgf("%s.%s is required for autoscaling, it won't be deleted", pod.Namespace, pod.Name)
 		return false, nil
 	}
 
@@ -223,7 +225,7 @@ func (d *Draininator) autoscalerFilter(pod v1.Pod) (bool, error) {
 func (d *Draininator) ignoredPodFilter(pod v1.Pod) (bool, error) {
 	for _, ignoredPod := range d.ignorePods {
 		if strings.EqualFold(ignoredPod, pod.Name) {
-			d.log.Debug("%s is the current pod, it won't be deleted", pod.Name)
+			d.log.Info().Msgf("%s is the current pod, it won't be deleted", pod.Name)
 			return false, nil
 		}
 	}
@@ -247,7 +249,7 @@ func (d *Draininator) localStorageFilter(pod v1.Pod) (bool, error) {
 		return false, fmt.Errorf("pod %s.%s has local storage, node cannot be drained.", pod.Namespace, pod.Name)
 	}
 
-	d.log.SLog("Pod %s.%s has local storage. Force removing...", pod.Namespace, pod.Name)
+	d.log.Info().Msgf("  Pod %s.%s has local storage. Force removing...", pod.Namespace, pod.Name)
 	return true, nil
 }
 
@@ -266,7 +268,7 @@ func (d *Draininator) unreplicatedFilter(pod v1.Pod) (bool, error) {
 		return false, fmt.Errorf("pod %s.%s is unreplicated, node cannot be drained (set force=true to drain)", pod.Namespace, pod.Name)
 	}
 
-	d.log.SLog("Pod %s.%s does not have a controller. Force removing...", pod.Namespace, pod.Name)
+	d.log.Info().Msgf("  Pod %s.%s does not have a controller. Force removing...", pod.Namespace, pod.Name)
 	return true, nil
 }
 
@@ -327,9 +329,9 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 			err := helper.WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
 
 			if err != nil {
-				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+				d.log.Error().Msgf("Failed to wait for pod deletion: %s", err.Error())
 			} else {
-				d.log.SLog("Pod %s.%s is deleted.", p.Namespace, p.Name)
+				d.log.Info().Msgf("  Pod %s.%s is deleted.", p.Namespace, p.Name)
 			}
 		}(pod)
 	}
@@ -385,7 +387,7 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 
 				// Error other than TooManyRequests
 				if !k8serrors.IsTooManyRequests(err) {
-					d.log.Err("Error Evicting Pod: %s - %s", pod.Name, err.Error())
+					d.log.Error().Msgf("Error Evicting Pod: %s - %s", pod.Name, err.Error())
 					return
 				}
 
@@ -395,9 +397,9 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 
 			err = helper.WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
 			if err != nil {
-				d.log.Err("Failed to wait for pod deletion: %s", err.Error())
+				d.log.Error().Msgf("Failed to wait for pod deletion: %s", err.Error())
 			} else {
-				d.log.SLog("Pod %s.%s is deleted.", pod.Namespace, pod.Name)
+				d.log.Info().Msgf("  Pod %s.%s is deleted.", pod.Namespace, pod.Name)
 			}
 		}(p)
 	}

@@ -10,7 +10,6 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -20,7 +19,9 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -69,7 +70,7 @@ type EKSClusterProvider struct {
 	clusterManager *eks.EKS
 	asgManager     *autoscaling.AutoScaling
 	clusterData    *EKSClusterData
-	log            logging.NamedLogger
+	log            zerolog.Logger
 
 	// Getting a list of node pools can be somewhat expensive for EKS
 	// due to the nature of abstraction used by AWS. It's better if we
@@ -93,7 +94,7 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 		asgManager:     asgManager,
 		npLock:         new(sync.RWMutex),
 		nodePools:      []*EKSNodePool{},
-		log:            logging.NamedLogger("EKSClusterProvider"),
+		log:            log.With().Str("component", "EKSClusterProvider").Logger(),
 	}
 
 	err = cp.initClusterData()
@@ -491,7 +492,7 @@ func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, er
 		os.Setenv(AWSAccessKeyID, accessKey.AccessKeyID)
 		os.Setenv(AWSSecretAccessKey, accessKey.SecretAccessKey)
 	} else {
-		klog.Infof("[Warning] Failed to load valid access key from secret. Err=%s", err)
+		log.Warn().Msgf("Failed to load valid access key from secret. Err=%s", err)
 	}
 
 	c := aws.NewConfig().
@@ -535,7 +536,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 			NodegroupName: aws.String(nodePoolName),
 		})
 		if err != nil || nodeGroupResp.Nodegroup == nil {
-			klog.Infof("Could not find NodeGroup: %s in Cluster: %s", nodePoolName, cName)
+			log.Info().Msgf("Could not find NodeGroup: %s in Cluster: %s", nodePoolName, cName)
 			continue
 		}
 
@@ -580,7 +581,7 @@ func (p *EKSClusterProvider) hasInstance(ng *eks.Nodegroup, instanceID string) b
 		AutoScalingGroupNames: asgNames,
 	})
 	if err != nil {
-		klog.Infof("Could not load autoscaling groups for names: %+v", aws.StringValueSlice(asgNames))
+		log.Info().Msgf("Could not load autoscaling groups for names: %+v", aws.StringValueSlice(asgNames))
 		return false
 	}
 

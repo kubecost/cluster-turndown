@@ -17,13 +17,14 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog"
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule/v1alpha1"
 	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
 	schedulescheme "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned/scheme"
 	informers "github.com/kubecost/cluster-turndown/v2/pkg/generated/informers/externalversions/turndownschedule/v1alpha1"
 	listers "github.com/kubecost/cluster-turndown/v2/pkg/generated/listers/turndownschedule/v1alpha1"
+
+	"github.com/rs/zerolog/log"
 )
 
 const controllerAgentName = "turndown-schedule-controller"
@@ -74,7 +75,7 @@ func NewTurndownScheduleResourceController(
 	utilruntime.Must(schedulescheme.AddToScheme(scheme.Scheme))
 
 	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartLogging(log.Info().Msgf)
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
@@ -89,7 +90,7 @@ func NewTurndownScheduleResourceController(
 		recorder:          recorder,
 	}
 
-	klog.V(4).Info("Setting up event handlers")
+	log.Info().Msg("Setting up event handlers")
 
 	// Set up an event handler for when TurndownSchedule resources change
 	schedulesInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -107,7 +108,7 @@ func (c *TurndownScheduleResourceController) Run(threadiness int, stopCh <-chan 
 	defer c.workqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
-	klog.V(3).Info("Starting TurndownSchedule controller")
+	log.Info().Msg("Starting TurndownSchedule controller")
 
 	// Wait for the caches to be synced before starting workers
 	if ok := cache.WaitForCacheSync(stopCh, c.scheduleSynced); !ok {
@@ -261,7 +262,7 @@ func (c *TurndownScheduleResourceController) tryCancel(schedule *v1alpha1.Turndo
 		if strings.EqualFold(current.ScaleDownID, status.ScaleDownID) && strings.EqualFold(current.ScaleUpID, status.ScaleUpID) {
 			err := c.scheduler.Cancel(false)
 			if err != nil {
-				klog.Infof("Failed to cancel: %s", err.Error())
+				log.Error().Msgf("Failed to cancel: %s", err.Error())
 				return err
 			}
 		}

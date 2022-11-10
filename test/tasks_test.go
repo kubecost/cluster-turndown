@@ -10,14 +10,6 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/async/tasks"
 )
 
-/*
-func init() {
-	klog.InitFlags(nil)
-	flag.Set("v", "3")
-	flag.Parse()
-}
-*/
-
 // Sleep a random number of milliseconds between min and max
 func randSleep(min, max int) {
 	t := min + rand.Intn(max-min)

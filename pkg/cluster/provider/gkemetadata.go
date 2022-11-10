@@ -9,7 +9,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 
-	"k8s.io/klog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -57,7 +57,7 @@ func (md *GKEMetaData) GetProjectID() string {
 
 	projectID, err := md.client.ProjectID()
 	if err != nil {
-		klog.V(1).Infof("[Error] %s", err.Error())
+		log.Error().Msgf("Getting Project ID: %s", err.Error())
 		return ""
 	}
 
@@ -73,7 +73,7 @@ func (md *GKEMetaData) GetClusterID() string {
 
 	attribute, err := md.client.InstanceAttributeValue("cluster-name")
 	if err != nil {
-		klog.V(1).Infof("[Error] %s", err.Error())
+		log.Error().Msgf("Failed getting cluster-name instance attribute: %s", err.Error())
 		return ""
 	}
 
@@ -89,7 +89,7 @@ func (md *GKEMetaData) GetMasterZone() string {
 
 	results, err := md.client.InstanceAttributeValue("kube-env")
 	if err != nil {
-		klog.V(1).Infof("[Error] %s", err.Error())
+		log.Error().Msgf("Failed getting Master Zone from kube-env instance attribute: %s", err.Error())
 		return ""
 	}
 
@@ -98,7 +98,7 @@ func (md *GKEMetaData) GetMasterZone() string {
 		line, err := ioReader.ReadString('\n')
 		if err != nil {
 			if err != io.EOF {
-				klog.V(1).Infof("Failed to read kube-env data: %s", err.Error())
+				log.Error().Msgf("Failed to read kube-env data: %s", err.Error())
 			}
 
 			return ""
@@ -125,7 +125,7 @@ func (md *GKEMetaData) GetZone() string {
 
 	zone, err := md.client.Zone()
 	if err != nil {
-		klog.V(1).Infof("[Error] %s", err.Error())
+		log.Error().Msgf("Failed getting zone: %s", err.Error())
 		return ""
 	}
 

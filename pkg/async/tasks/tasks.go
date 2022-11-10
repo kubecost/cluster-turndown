@@ -6,7 +6,7 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 
-	"k8s.io/klog"
+	"github.com/rs/zerolog/log"
 )
 
 //--------------------------------------------------------------------------
@@ -279,7 +279,7 @@ func (se *SerialExecutor) Execute() error {
 	// Select the completion state
 	select {
 	case <-completed:
-		klog.V(3).Infof("Serial Execution Complete. Tasks Remaining: %d", se.tasks.Len())
+		log.Info().Msgf("Serial Execution Complete. Tasks Remaining: %d", se.tasks.Len())
 	}
 
 	se.updateCurrent(nil)

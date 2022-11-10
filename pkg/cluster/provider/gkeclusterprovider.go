@@ -9,7 +9,8 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
 	"github.com/kubecost/cluster-turndown/v2/pkg/file"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -108,7 +109,7 @@ type GKEClusterProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *gke.ClusterManagerClient
 	metadata       *GKEMetaData
-	log            logging.NamedLogger
+	log            zerolog.Logger
 }
 
 // NewGKEClusterProvider creates a new GKEClusterProvider instance as the ClusterProvider
@@ -122,7 +123,7 @@ func NewGKEClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
 		metadata:       NewGKEMetaData(),
-		log:            logging.NamedLogger("GKEClusterProvider"),
+		log:            log.With().Str("component", "GKEClusterProvider").Logger(),
 	}, nil
 }
 
@@ -175,7 +176,7 @@ func (p *GKEClusterProvider) GetNodePools() ([]NodePool, error) {
 	cluster := p.metadata.GetClusterID()
 
 	req := &container.ListNodePoolsRequest{Parent: p.getClusterResourcePath()}
-	p.log.Log("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
+	p.log.Info().Msgf("Loading node pools for: [ProjectID: %s, Zone: %s, ClusterID: %s]", projectID, zone, cluster)
 
 	resp, err := p.clusterManager.ListNodePools(ctx, req)
 	if err != nil {
@@ -255,13 +256,13 @@ func (p *GKEClusterProvider) CreateNodePool(c context.Context, name, machineType
 	for {
 		_, err := p.clusterManager.CreateNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
+			p.log.Info().Msgf("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
 			break
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
 		if isRetriableError(err) {
-			p.log.Log("NodePool operation already in queue, retrying...")
+			p.log.Warn().Msgf("NodePool operation already in queue, retrying...")
 		} else {
 			return err
 		}
@@ -319,13 +320,13 @@ func (p *GKEClusterProvider) CreateAutoScalingNodePool(c context.Context, name, 
 	for {
 		_, err := p.clusterManager.CreateNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
+			p.log.Info().Msgf("Created NodePool Successfully: %s. Waiting for nodes to become available...", name)
 			break
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
 		if isRetriableError(err) {
-			p.log.Log("NodePool operation already in queue, retrying...")
+			p.log.Warn().Msg("NodePool operation already in queue, retrying...")
 		} else {
 			return err
 		}
@@ -359,13 +360,13 @@ func (p *GKEClusterProvider) UpdateNodePoolSize(c context.Context, nodePool Node
 	for {
 		_, err := p.clusterManager.SetNodePoolSize(ctx, request)
 		if err == nil {
-			p.log.Log("Resized NodePool Successfully: %s", request.NodePoolId)
+			p.log.Info().Msgf("Resized NodePool Successfully: %s", request.NodePoolId)
 			return nil
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
 		if isRetriableError(err) {
-			p.log.Log("NodePool operation already in queue, retrying...")
+			p.log.Warn().Msg("NodePool operation already in queue, retrying...")
 		} else {
 			return err
 		}
@@ -424,13 +425,13 @@ func (p *GKEClusterProvider) DeleteNodePool(c context.Context, nodePool NodePool
 	for {
 		_, err := p.clusterManager.DeleteNodePool(ctx, request)
 		if err == nil {
-			p.log.Log("Deleted NodePool Successfully: %s", nodePool.Name())
+			p.log.Info().Msgf("Deleted NodePool Successfully: %s", nodePool.Name())
 			return nil
 		}
 
 		// If the error represents a temporary state where we can retry, log and continue
 		if isRetriableError(err) {
-			p.log.Log("NodePool operation already in queue, retrying...")
+			p.log.Warn().Msg("NodePool operation already in queue, retrying...")
 		} else {
 			return err
 		}
