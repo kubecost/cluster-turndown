@@ -8,7 +8,8 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/async"
 
 	"github.com/google/uuid"
-	"k8s.io/klog"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -175,7 +176,7 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 			if sjs.jobComplete != nil {
 				sjs.jobComplete(job.id, job.next, job.metadata, err)
 			} else if err != nil {
-				klog.V(1).Infof("Error: Job failed with error: %s", err.Error())
+				log.Error().Msgf("Job failed with error: %s", err.Error())
 			}
 		}()
 
@@ -185,7 +186,7 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 			err = job.job()
 		case <-ctx.Done():
 			isCancelled = true
-			klog.V(1).Infof("Job was cancelled: %s", job.id)
+			log.Info().Msgf("Job was cancelled: %s", job.id)
 		}
 	}()
 }

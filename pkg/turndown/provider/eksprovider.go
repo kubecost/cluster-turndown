@@ -6,12 +6,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
-
 	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -23,14 +24,14 @@ const (
 type EKSProvider struct {
 	kubernetes      kubernetes.Interface
 	clusterProvider cp.ClusterProvider
-	log             logging.NamedLogger
+	log             zerolog.Logger
 }
 
 func NewEKSProvider(kubernetes kubernetes.Interface, clusterProvider cp.ClusterProvider) TurndownProvider {
 	return &EKSProvider{
 		kubernetes:      kubernetes,
 		clusterProvider: clusterProvider,
-		log:             logging.NamedLogger("EKSProvider"),
+		log:             log.With().Str("component", "EKSProvider").Logger(),
 	}
 }
 
@@ -66,7 +67,7 @@ func (p *EKSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) erro
 
 		err := p.clusterProvider.UpdateNodePoolSize(c, np, size)
 		if err != nil {
-			p.log.Err("Updating NodePool: %s", err.Error())
+			p.log.Error().Msgf("Updating NodePool: %s", err.Error())
 			return err
 		}
 
@@ -74,7 +75,7 @@ func (p *EKSProvider) SetNodePoolSizes(nodePools []cp.NodePool, size int32) erro
 			EKSNodeGroupPreviousKey: rng,
 		})
 		if err != nil {
-			p.log.Err("Creating or Updating Tags: %s", err.Error())
+			p.log.Error().Msgf("Creating or Updating Tags: %s", err.Error())
 
 			return err
 		}
@@ -95,25 +96,25 @@ func (p *EKSProvider) ResetNodePoolSizes(nodePools []cp.NodePool) error {
 		tags := np.Tags()
 		rangeTag, ok := tags[EKSNodeGroupPreviousKey]
 		if !ok {
-			p.log.Err("Failed to locate tag: %s for NodePool: %s", EKSNodeGroupPreviousKey, np.Name())
+			p.log.Error().Msgf("Failed to locate tag: %s for NodePool: %s", EKSNodeGroupPreviousKey, np.Name())
 			continue
 		}
 
 		_, _, count := p.expandRange(rangeTag)
 		if count < 0 {
-			p.log.Err("Failed to parse range used to resize node pool.")
+			p.log.Error().Msg("Failed to parse range used to resize node pool.")
 			continue
 		}
 
 		err := p.clusterProvider.UpdateNodePoolSize(c, np, count)
 		if err != nil {
-			p.log.Err("Updating NodePool: %s", err.Error())
+			p.log.Error().Msgf("Updating NodePool: %s", err.Error())
 			return err
 		}
 
 		err = p.clusterProvider.DeleteTags(c, np, []string{EKSNodeGroupPreviousKey})
 		if err != nil {
-			p.log.Err("Deleting Tags: %s", err.Error())
+			p.log.Error().Msgf("Deleting Tags: %s", err.Error())
 
 			return err
 		}
@@ -131,19 +132,19 @@ func (p *EKSProvider) expandRange(s string) (int32, int32, int32) {
 
 	count, err := strconv.Atoi(values[2])
 	if err != nil {
-		p.log.Err("Parsing Count: %s", err.Error())
+		p.log.Error().Msgf("Parsing Count: %s", err.Error())
 		return -1, -1, -1
 	}
 
 	min, err := strconv.Atoi(values[0])
 	if err != nil {
-		p.log.Err("Parsing Min: %s", err.Error())
+		p.log.Error().Msgf("Parsing Min: %s", err.Error())
 		min = count
 	}
 
 	max, err := strconv.Atoi(values[1])
 	if err != nil {
-		p.log.Err("Parsing Max: %s", err.Error())
+		p.log.Error().Msgf("Parsing Max: %s", err.Error())
 		max = count
 	}
 

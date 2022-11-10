@@ -6,13 +6,15 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
 	cp "github.com/kubecost/cluster-turndown/v2/pkg/cluster/provider"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -29,7 +31,7 @@ type MasterlessTurndownStrategy struct {
 	client         kubernetes.Interface
 	provider       provider.TurndownProvider
 	nodePoolLabels map[string]string
-	log            logging.NamedLogger
+	log            zerolog.Logger
 }
 
 // Creates a new MasterlessTurndownStrategy instance
@@ -38,7 +40,7 @@ func NewMasterlessTurndownStrategy(client kubernetes.Interface, provider provide
 		client:         client,
 		provider:       provider,
 		nodePoolLabels: npLabels,
-		log:            logging.NamedLogger("MasterlessStrategy"),
+		log:            log.With().Str("component", "MasterlessStrategy").Logger(),
 	}
 }
 
@@ -74,7 +76,7 @@ func (ktdm *MasterlessTurndownStrategy) CreateOrGetHostNode() (*v1.Node, error) 
 
 	// When AutoScaling is Not Enabled, Create a Turndown Node
 	if autoScalingNodePool == nil {
-		ktdm.log.Log("Finite node backed cluster. Creating singleton nodepool for turndown.")
+		ktdm.log.Info().Msg("Finite node backed cluster. Creating singleton nodepool for turndown.")
 
 		// There isn't a node pool for the turndown pod, so create one
 		if !ktdm.provider.IsTurndownNodePool() {

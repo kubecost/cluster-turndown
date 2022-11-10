@@ -14,7 +14,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -58,16 +59,16 @@ func NewTurndownProvider(client kubernetes.Interface, clusterProvider cp.Cluster
 	provider := strings.ToLower(node.Spec.ProviderID)
 	if strings.HasPrefix(provider, "aws") {
 		if _, ok := node.Labels["eks.amazonaws.com/nodegroup"]; ok {
-			klog.V(2).Info("Found ProviderID starting with \"aws\" and eks nodegroup, using EKS Provider")
+			log.Info().Msg("Found ProviderID starting with \"aws\" and eks nodegroup, using EKS Provider")
 			return NewEKSProvider(client, clusterProvider), nil
 		}
-		klog.V(2).Info("Found ProviderID starting with \"aws\", using AWS Provider")
+		log.Info().Msg("Found ProviderID starting with \"aws\", using AWS Provider")
 		return NewAWSProvider(client, clusterProvider), nil
 	} else if strings.HasPrefix(provider, "azure") {
-		klog.V(2).Info("Found ProviderID starting with \"azure\", using Azure Provider")
+		log.Info().Msg("Found ProviderID starting with \"azure\", using Azure Provider")
 		return nil, errors.New("Azure Not Supported")
 	} else {
-		klog.V(2).Info("Unsupported provider, falling back to default")
+		log.Info().Msg("Unsupported provider, falling back to default")
 		return nil, errors.New("Custom Not Supported")
 	}
 }

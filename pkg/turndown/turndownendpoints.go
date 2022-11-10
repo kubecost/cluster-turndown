@@ -15,7 +15,8 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
+
+	"github.com/rs/zerolog/log"
 )
 
 // DataEnvelope is a generic wrapper struct for http response data
@@ -189,7 +190,7 @@ func (te *TurndownEndpoints) HandleInitEnvironment(w http.ResponseWriter, r *htt
 			return
 		}
 	} else {
-		klog.Infof("Already running on correct turndown node. No need to setup environment")
+		log.Info().Msgf("Already running on correct turndown node. No need to setup environment")
 	}
 
 	w.Write(wrapData("", nil))
@@ -199,7 +200,7 @@ func wrapData(data interface{}, err error) []byte {
 	var resp []byte
 
 	if err != nil {
-		klog.V(1).Infof("Error returned to client: %s", err.Error())
+		log.Error().Msgf("Error returned to client: %s", err.Error())
 		resp, _ = json.Marshal(&DataEnvelope{
 			Code:   http.StatusInternalServerError,
 			Status: "error",

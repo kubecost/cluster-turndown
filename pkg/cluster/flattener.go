@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/patcher"
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1b1 "k8s.io/api/batch/v1beta1"
@@ -15,7 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	"k8s.io/klog"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 type Flattener struct {
 	client          kubernetes.Interface
 	omitDeployments []string
-	log             logging.NamedLogger
+	log             zerolog.Logger
 }
 
 // Creates a new Draininator instance for a specific node.
@@ -39,7 +39,7 @@ func NewFlattener(client kubernetes.Interface, omitDeployments []string) *Flatte
 	return &Flattener{
 		client:          client,
 		omitDeployments: omitDeployments,
-		log:             logging.NamedLogger("Flattener"),
+		log:             log.With().Str("component", "Flattener").Logger(),
 	}
 }
 
@@ -48,19 +48,19 @@ func NewFlattener(client kubernetes.Interface, omitDeployments []string) *Flatte
 // is used to reduce node resources such that the autoscaler will reduce node counts
 // on a cluster as low as possible.
 func (d *Flattener) Flatten() error {
-	d.log.SLog("Starting to Flatten All Deployments...")
+	d.log.Info().Msg("  Starting to Flatten All Deployments...")
 	err := d.FlattenDeployments()
 	if err != nil {
 		return err
 	}
 
-	d.log.SLog("Starting to Flatten All DaemonSets...")
+	d.log.Info().Msg("  Starting to Flatten All DaemonSets...")
 	err = d.FlattenDaemonSets()
 	if err != nil {
 		return err
 	}
 
-	d.log.SLog("Starting to Suspend All Jobs...")
+	d.log.Info().Msg("  Starting to Suspend All Jobs...")
 	err = d.SuspendJobs()
 	if err != nil {
 		return err
@@ -70,19 +70,19 @@ func (d *Flattener) Flatten() error {
 }
 
 func (d *Flattener) Expand() error {
-	d.log.SLog("Starting to Expand All Deployments...")
+	d.log.Info().Msg("  Starting to Expand All Deployments...")
 	err := d.ExpandDeployments()
 	if err != nil {
 		return err
 	}
 
-	d.log.SLog("Starting to Expand All DaemonSets...")
+	d.log.Info().Msg("  Starting to Expand All DaemonSets...")
 	err = d.ExpandDaemonSets()
 	if err != nil {
 		return err
 	}
 
-	d.log.SLog("Starting to Resume All Jobs...")
+	d.log.Info().Msg("  Starting to Resume All Jobs...")
 	err = d.ResumeJobs()
 	if err != nil {
 		return err
@@ -95,7 +95,7 @@ func (d *Flattener) Expand() error {
 func (d *Flattener) IsClusterFlattened() bool {
 	deployments, err := d.client.AppsV1().Deployments("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		d.log.Warn("Failed to fetch deployments: %s", err.Error())
+		d.log.Warn().Msgf("Failed to fetch deployments: %s", err.Error())
 	} else {
 		for _, deployment := range deployments.Items {
 			if d.isOmitted(&deployment) {
@@ -119,7 +119,7 @@ func (d *Flattener) IsClusterFlattened() bool {
 
 	daemonSets, err := d.client.AppsV1().DaemonSets("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		d.log.Warn("Failed to fetch daemonsets: %s", err.Error())
+		d.log.Warn().Msgf("Failed to fetch daemonsets: %s", err.Error())
 	} else {
 		for _, daemonSet := range daemonSets.Items {
 			if daemonSet.Annotations == nil {
@@ -134,7 +134,7 @@ func (d *Flattener) IsClusterFlattened() bool {
 
 	jobsList, err := d.client.BatchV1beta1().CronJobs("").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		d.log.Warn("Failed to fetch jobs: %s", err.Error())
+		d.log.Warn().Msgf("Failed to fetch jobs: %s", err.Error())
 	} else {
 		for _, job := range jobsList.Items {
 			if job.Annotations == nil {
@@ -174,7 +174,7 @@ func (d *Flattener) FlattenDeployments() error {
 
 		err := d.FlattenDeployment(deployment)
 		if err != nil {
-			d.log.SLog("Failed to flatten deployment: %s", deployment.Name)
+			d.log.Warn().Msgf("  Failed to flatten deployment: %s", deployment.Name)
 		}
 	}
 
@@ -190,7 +190,7 @@ func (d *Flattener) FlattenDaemonSets() error {
 	for _, daemonSet := range daemonSets.Items {
 		err := d.FlattenDaemonSet(daemonSet)
 		if err != nil {
-			d.log.SLog("Failed to flatten DaemonSet: %s", daemonSet.Name)
+			d.log.Warn().Msgf("  Failed to flatten DaemonSet: %s", daemonSet.Name)
 		}
 	}
 
@@ -206,7 +206,7 @@ func (d *Flattener) SuspendJobs() error {
 	for _, job := range jobsList.Items {
 		err := d.SuspendJob(job)
 		if err != nil {
-			d.log.SLog("Failed to suspend CronJob: %s", err.Error())
+			d.log.Warn().Msgf("Failed to suspend CronJob: %s", err.Error())
 		}
 	}
 
@@ -356,7 +356,7 @@ func (d *Flattener) ExpandDeployments() error {
 
 		err := d.ExpandDeployment(deployment)
 		if err != nil {
-			d.log.SLog("Failed to expand deployment: %s", deployment.Name)
+			d.log.Warn().Msgf("  Failed to expand deployment: %s", deployment.Name)
 		}
 	}
 
@@ -372,7 +372,7 @@ func (d *Flattener) ExpandDaemonSets() error {
 	for _, daemonSet := range daemonSets.Items {
 		err := d.ExpandDaemonSet(daemonSet)
 		if err != nil {
-			d.log.SLog("Failed to flatten DaemonSet: %s", daemonSet.Name)
+			d.log.Warn().Msgf("  Failed to flatten DaemonSet: %s", daemonSet.Name)
 		}
 	}
 
@@ -388,7 +388,7 @@ func (d *Flattener) ResumeJobs() error {
 	for _, job := range jobsList.Items {
 		err := d.ResumeJob(job)
 		if err != nil {
-			d.log.SLog("Failed to resume CronJob: %s", err.Error())
+			d.log.Warn().Msgf("  Failed to resume CronJob: %s", err.Error())
 		}
 	}
 
@@ -529,12 +529,12 @@ func (d *Flattener) resetReplicas(deployment *appsv1.Deployment) bool {
 
 	replicas, err := strconv.ParseInt(replicasEntry, 10, 32)
 	if err != nil {
-		klog.V(1).Infof("Failed to parse replicas annotation: %s", err.Error())
+		log.Error().Msgf("Failed to parse replicas annotation: %s", err.Error())
 		return false
 	}
 
 	var numReplicas int32 = int32(replicas)
-	d.log.SLog("Setting Replicas for %s to %d", deployment.Name, numReplicas)
+	d.log.Info().Msgf("  Setting Replicas for %s to %d", deployment.Name, numReplicas)
 
 	delete(deployment.Annotations, KubecostTurnDownReplicas)
 	deployment.Spec.Replicas = &numReplicas
@@ -553,7 +553,7 @@ func (d *Flattener) resetRollingUpdate(deployment *appsv1.Deployment) bool {
 	}
 
 	maxUnavailable := intstr.Parse(maxUnavailableEntry)
-	d.log.SLog("Setting Rollout Max Unavailable for %s to %s", deployment.Name, maxUnavailable.String())
+	d.log.Info().Msgf("  Setting Rollout Max Unavailable for %s to %s", deployment.Name, maxUnavailable.String())
 
 	delete(deployment.Annotations, KubecostTurnDownRollout)
 

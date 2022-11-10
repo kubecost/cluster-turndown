@@ -7,9 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubecost/cluster-turndown/v2/pkg/logging"
-
-	"k8s.io/klog"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -44,7 +43,7 @@ type TurndownScheduler struct {
 	lock      *sync.Mutex
 	manager   TurndownManager
 	store     ScheduleStore
-	log       logging.NamedLogger
+	log       zerolog.Logger
 
 	// FIXME: Hack while supporting only a single scheduled pair
 	lastTypeCompleted string
@@ -56,7 +55,7 @@ func NewTurndownScheduler(manager TurndownManager, store ScheduleStore) *Turndow
 		lock:      new(sync.Mutex),
 		manager:   manager,
 		store:     store,
-		log:       logging.NamedLogger("TurndownScheduler"),
+		log:       log.With().Str("component", "TurndownScheduler").Logger(),
 	}
 
 	ts.scheduler.SetJobCompleteHandler(ts.onJobCompleted)
@@ -65,7 +64,7 @@ func NewTurndownScheduler(manager TurndownManager, store ScheduleStore) *Turndow
 	if err == nil {
 		scheduleErr := ts.ScheduleTurndownBySchedule(schedule)
 		if scheduleErr != nil {
-			klog.V(1).Infof("Failed to schedule from saved state: %s", scheduleErr.Error())
+			log.Error().Msgf("Failed to schedule from saved state: %s", scheduleErr.Error())
 		}
 	}
 
@@ -116,7 +115,7 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 	var err error
 
 	if current == TurndownJobTypeScaleUp && downRepeat == TurndownJobRepeatNone {
-		klog.V(3).Infof("ScaleUp Job with NoRepeat ScaleDown. Omitting Scale Down Schedule.")
+		log.Info().Msg("ScaleUp Job with NoRepeat ScaleDown. Omitting Scale Down Schedule.")
 	} else {
 		scaleDownID, err = ts.scheduler.ScheduleWithID(schedule.ScaleDownID, downTime, ts.scaleDown, downMeta)
 		if err != nil {
@@ -198,13 +197,13 @@ func (ts *TurndownScheduler) ScheduleTurndown(from time.Time, to time.Time, repe
 
 	// Already a turndown schedule
 	if ts.schedule != nil {
-		ts.log.Err("Failed to scheduled turndown. Schedule already exists.")
+		ts.log.Error().Msg("Failed to scheduled turndown. Schedule already exists.")
 		return nil, fmt.Errorf("Currently, only a single turndown schedule is allowed.")
 	}
 
 	err := validateSchedule(from, to, &repeatType)
 	if err != nil {
-		ts.log.Err("Failed to validate schedule: %s", err.Error())
+		ts.log.Error().Msgf("Failed to validate schedule: %s", err.Error())
 		return nil, err
 	}
 
@@ -238,7 +237,7 @@ func (ts *TurndownScheduler) ScheduleTurndown(from time.Time, to time.Time, repe
 
 	ts.store.Create(ts.schedule)
 
-	ts.log.Log("Schedule Created: %+v", ts.schedule)
+	ts.log.Info().Msgf("Schedule Created: %+v", ts.schedule)
 
 	// Copy for return value
 	toReturn := *ts.schedule
@@ -252,7 +251,7 @@ func (ts *TurndownScheduler) Cancel(force bool) error {
 	defer ts.lock.Unlock()
 
 	if ts.schedule == nil {
-		ts.log.Err("No Schedules to Cancel")
+		ts.log.Error().Msg("No Schedules to Cancel")
 
 		return NoSchedulesToCancelErr
 	}
@@ -262,7 +261,7 @@ func (ts *TurndownScheduler) Cancel(force bool) error {
 
 	// Unless force is flagged, do not allow jobs to be cancelled if one is currently running
 	if !force && (ts.scheduler.IsRunning(downID) || ts.scheduler.IsRunning(upID)) {
-		ts.log.Err("Attempted to cancel turndown while a job is running.")
+		ts.log.Error().Msg("Attempted to cancel turndown while a job is running.")
 		return CancelWhileRunningErr
 	}
 
@@ -272,15 +271,15 @@ func (ts *TurndownScheduler) Cancel(force bool) error {
 	ts.schedule = nil
 	ts.store.Clear()
 
-	ts.log.Log("Turndown Schedule Successfully Cancelled")
+	ts.log.Info().Msg("Turndown Schedule Successfully Cancelled")
 
 	// If we cancel the turndown after it's already scaled down, scale back up
 	if ts.lastTypeCompleted == TurndownJobTypeScaleDown {
-		ts.log.Log("Last Turndown Job that ran was ScaleDown. Cancellation will now run ScaleUp...")
+		ts.log.Info().Msg("Last Turndown Job that ran was ScaleDown. Cancellation will now run ScaleUp...")
 
 		err := ts.manager.ScaleUpCluster()
 		if err != nil {
-			ts.log.Err("Failed to ScaleUp after Cancel: %s", err.Error())
+			ts.log.Error().Msgf("Failed to ScaleUp after Cancel: %s", err.Error())
 		}
 
 		// Schedule Reset after ScaleUp
@@ -311,7 +310,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 	// Check to make sure this is a scheduler job made for turndown
 	jobType, ok := metadata[TurndownJobType]
 	if !ok {
-		ts.log.Warn("Not a turndown job. Ignoring.")
+		ts.log.Warn().Msg("Not a turndown job. Ignoring.")
 		return
 	}
 
@@ -327,7 +326,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 			return
 		}
 
-		ts.log.Err("Failed to run scaling job: %s - Error: %s", jobType, err.Error())
+		ts.log.Error().Msgf("Failed to run scaling job: %s - Error: %s", jobType, err.Error())
 	}
 
 	// Reset the Last Completed JobType
@@ -343,13 +342,13 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 		})
 
 		if err != nil {
-			ts.log.Err("Failed to create reset job: %s", err.Error())
+			ts.log.Error().Msgf("Failed to create reset job: %s", err.Error())
 		}
 	}
 
 	repeat, ok := metadata[TurndownJobRepeat]
 	if !ok || repeat == TurndownJobRepeatNone {
-		ts.log.Log("Did not find a repeat task. Not rescheduling")
+		ts.log.Info().Msg("Did not find a repeat task. Not rescheduling")
 
 		// For non-repeat tasks, make sure we update the current task unless it is a scale-up
 		ts.lock.Lock()
@@ -378,7 +377,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 
 	newJobID, err := ts.scheduler.Schedule(newScheduled, jobFunc, metadata)
 	if err != nil {
-		ts.log.Err("Failed to reschedule job: %s", err.Error())
+		ts.log.Error().Msgf("Failed to reschedule job: %s", err.Error())
 	}
 
 	ts.lock.Lock()
@@ -401,12 +400,12 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 }
 
 func (ts *TurndownScheduler) scaleDown() error {
-	klog.V(3).Info("-- Scale Down --")
+	log.Info().Msg("-- Scale Down --")
 
 	// Determine if we are running on a single small node
 	isOnNode, err := ts.manager.IsRunningOnTurndownNode()
 	if nil != err {
-		ts.log.Err("Error attempting to check status of current node")
+		ts.log.Error().Msg("Error attempting to check status of current node")
 	}
 
 	// If we're not running on the single turndown node, create a new turndown node,
@@ -415,36 +414,36 @@ func (ts *TurndownScheduler) scaleDown() error {
 	// has been successfully provisioned. The current state of the scheduling must be
 	// pulled from the persistent store in order to continue.
 	if !isOnNode {
-		ts.log.Log("Turndown Pod does not exist on expected host node. Preparing environment...")
+		ts.log.Info().Msg("Turndown Pod does not exist on expected host node. Preparing environment...")
 
 		err := ts.manager.PrepareTurndownEnvironment()
 		if err != nil {
-			ts.log.Err("Failed to prepare current turndown environment. Cancelling. Err=%s", err.Error())
+			ts.log.Error().Msgf("Failed to prepare current turndown environment. Cancelling. Err=%s", err.Error())
 
 			ts.Cancel(true)
 			return CancelledErr
 		}
 
-		ts.log.Log("Environment Preparation Completed. Pod will reschedule on target host node now.")
+		ts.log.Info().Msg("Environment Preparation Completed. Pod will reschedule on target host node now.")
 
 		// Since we'll be moving nodes and rescheduling, we'll return a "special" error here
 		return EnvironmentPrepareErr
 	} else {
-		ts.log.Log("Already running on correct turndown host node. No need to setup environment.")
+		ts.log.Info().Msg("Already running on correct turndown host node. No need to setup environment.")
 	}
 
 	return ts.manager.ScaleDownCluster()
 }
 
 func (ts *TurndownScheduler) scaleUp() error {
-	klog.V(3).Info("-- Scale Up --")
+	log.Info().Msg("-- Scale Up --")
 	err := ts.manager.ScaleUpCluster()
 
 	return err
 }
 
 func (ts *TurndownScheduler) reset() error {
-	klog.V(3).Info("-- Reset --")
+	log.Info().Msg("-- Reset --")
 	err := ts.manager.ResetTurndownEnvironment()
 
 	return err
