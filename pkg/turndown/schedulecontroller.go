@@ -346,6 +346,19 @@ func clearCompletedSchedules(client clientset.Interface, maxAge time.Duration) {
 
 	// Find schedules to prune
 	for _, schedule := range schedules.Items {
+		// If the State is empty, that means we've never touched it. This avoids
+		// a race condition where upon first creation of a TDS, we can start
+		// processing it and then in the middle of processing it we delete it
+		// (in a separate goroutine) because it has a totally empty Status.
+		//
+		// When we List the live TDS which has an empty status, the struct we
+		// receive for Status is actually initialized to default values, rather
+		// than nil. This makes State = "", LastUpdated 0001-01-01...), etc.
+		// which this function otherwise thinks is a failure state that should
+		// be removed.
+		if len(schedule.Status.State) == 0 {
+			continue
+		}
 		if schedule.Status.State != ScheduleStateSuccess {
 			lastUpdated := schedule.Status.LastUpdated.Time
 			if lastUpdated.Before(mustBeAfter) {
