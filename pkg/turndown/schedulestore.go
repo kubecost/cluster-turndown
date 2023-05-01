@@ -14,6 +14,8 @@ import (
 	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/rs/zerolog/log"
 )
 
 type Schedule struct {
@@ -45,7 +47,7 @@ func NewKubernetesScheduleStore(client clientset.Interface) ScheduleStore {
 	}
 }
 
-func WriteSchedule(schedule *Schedule, status *v1alpha1.TurndownScheduleStatus) {
+func WriteScheduleFromStatus(schedule *Schedule, status *v1alpha1.TurndownScheduleStatus) {
 	if schedule == nil {
 		return
 	}
@@ -59,7 +61,7 @@ func WriteSchedule(schedule *Schedule, status *v1alpha1.TurndownScheduleStatus) 
 	schedule.ScaleUpTime = status.ScaleUpTime.Time
 }
 
-func WriteScheduleStatus(status *v1alpha1.TurndownScheduleStatus, schedule *Schedule) {
+func WriteStatusFromSchedule(status *v1alpha1.TurndownScheduleStatus, schedule *Schedule) {
 	if status == nil {
 		return
 	}
@@ -83,7 +85,7 @@ func (kss *KubernetesScheduleStore) GetSchedule() (*Schedule, error) {
 	for _, td := range tds.Items {
 		if td.Status.State == ScheduleStateSuccess {
 			schedule := &Schedule{}
-			WriteSchedule(schedule, &td.Status)
+			WriteScheduleFromStatus(schedule, &td.Status)
 
 			return schedule, nil
 		}
@@ -101,16 +103,19 @@ func (kss *KubernetesScheduleStore) Create(schedule *Schedule) error {
 func (kss *KubernetesScheduleStore) Update(schedule *Schedule) error {
 	tds, err := kss.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("listing TurndownSchedules: %w", err)
 	}
 
 	for _, td := range tds.Items {
 		if td.Status.State == ScheduleStateSuccess {
 			tdCopy := td.DeepCopy()
-			WriteScheduleStatus(&tdCopy.Status, schedule)
+			WriteStatusFromSchedule(&tdCopy.Status, schedule)
 
 			_, err := kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
-			return err
+			if err != nil {
+				return fmt.Errorf("updating status of TurndownSchedule '%s': %w")
+			}
+			return nil
 		}
 	}
 
@@ -129,7 +134,10 @@ func (kss *KubernetesScheduleStore) Complete() {
 			tdCopy.Status.State = ScheduleStateCompleted
 			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
-			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
+			_, err := kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to UpdateStatus in kss.Complete()")
+			}
 			return
 		}
 	}
@@ -147,7 +155,10 @@ func (kss *KubernetesScheduleStore) Clear() {
 			tdCopy.Status.State = ScheduleStateCompleted
 			tdCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 
-			kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
+			_, err := kss.client.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), tdCopy, v1.UpdateOptions{})
+			if err != nil {
+				log.Error().Err(err).Msgf("Failed to UpdateStatus in kss.Clear()")
+			}
 			return
 		}
 	}
@@ -193,11 +204,11 @@ func (dss *DiskScheduleStore) Create(schedule *Schedule) error {
 func (dss *DiskScheduleStore) Update(schedule *Schedule) error {
 	data, err := json.Marshal(schedule)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshaling schedule: %w", err)
 	}
 	err = ioutil.WriteFile(dss.file, data, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("writing schedule file: %w", err)
 	}
 
 	return nil

@@ -177,6 +177,8 @@ func (c *TurndownScheduleResourceController) processNextWorkItem() bool {
 
 // Handles incoming key from the workqueue
 func (c *TurndownScheduleResourceController) handle(key string) error {
+	log.Trace().Msgf("Handling '%s'", key)
+
 	// Convert the namespace/name string into a distinct namespace and name
 	_, name, err := cache.SplitMetaNamespaceKey(key)
 	if err != nil {
@@ -192,7 +194,7 @@ func (c *TurndownScheduleResourceController) handle(key string) error {
 			return nil
 		}
 
-		return err
+		return fmt.Errorf("getting schedule '%s': %w", name, err)
 	}
 
 	// Check schedule for flagged deletion
@@ -201,17 +203,23 @@ func (c *TurndownScheduleResourceController) handle(key string) error {
 		if turndownSchedule.Status.State == ScheduleStateSuccess {
 			err = c.tryCancel(turndownSchedule)
 			if err != nil {
-				return err
+				return fmt.Errorf("trying cancel: %w", err)
 			}
 
+			log.Debug().
+				Str("turndownschedule", turndownSchedule.Name).
+				Msgf("Successfully canceled")
 			c.recorder.Event(turndownSchedule, corev1.EventTypeNormal, CancelTurndownSuccess, CancelTurndownSuccessMessage)
 		} else {
 			// Otherwise, just finalize schedule
 			clone := turndownSchedule.DeepCopy()
 			err := c.clearFinalizer(clone)
 			if err != nil {
-				return err
+				return fmt.Errorf("clearing finalizer: %w", err)
 			}
+			log.Debug().
+				Str("turndownschedule", clone.Name).
+				Msgf("Successfully cleared finalizer")
 		}
 
 		return nil
@@ -224,8 +232,12 @@ func (c *TurndownScheduleResourceController) handle(key string) error {
 
 	err = c.trySchedule(turndownSchedule)
 	if err != nil {
-		return err
+		return fmt.Errorf("trying schedule: %w", err)
 	}
+
+	log.Debug().
+		Str("turndownschedule", turndownSchedule.Name).
+		Msgf("Successfully scheduled")
 
 	c.recorder.Event(turndownSchedule, corev1.EventTypeNormal, ScheduleTurndownSuccess, ScheduleTurndownSuccessMessage)
 	return nil
@@ -237,18 +249,20 @@ func (c *TurndownScheduleResourceController) trySchedule(schedule *v1alpha1.Turn
 
 	s := scheduleCopy.Spec
 	tds, err := c.scheduler.ScheduleTurndown(s.Start.Time, s.End.Time, s.Repeat)
-
 	// Update the Schedule Status on Creation Here -- Other status changes are made by ScheduleStore
 	scheduleCopy.Status.LastUpdated = v1.NewTime(time.Now().UTC())
 	if err != nil {
 		scheduleCopy.Status.State = ScheduleStateFailed
 	} else {
 		scheduleCopy.Status.State = ScheduleStateSuccess
-		WriteScheduleStatus(&scheduleCopy.Status, tds)
+		WriteStatusFromSchedule(&scheduleCopy.Status, tds)
 	}
 
-	_, err = c.clientset.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), scheduleCopy, v1.UpdateOptions{})
-	return err
+	if _, err := c.clientset.KubecostV1alpha1().TurndownSchedules().UpdateStatus(context.TODO(), scheduleCopy, v1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("updating status: %w", err)
+	}
+
+	return nil
 }
 
 // Tries to cancel a turndown schedule based on the soft deletion of a TurndownSchedule resource
@@ -362,7 +376,17 @@ func clearCompletedSchedules(client clientset.Interface, maxAge time.Duration) {
 		if schedule.Status.State != ScheduleStateSuccess {
 			lastUpdated := schedule.Status.LastUpdated.Time
 			if lastUpdated.Before(mustBeAfter) {
-				client.KubecostV1alpha1().TurndownSchedules().Delete(context.TODO(), schedule.Name, v1.DeleteOptions{})
+				log.Info().
+					Str("state", schedule.Status.State).
+					Str("lastUpdated", schedule.Status.LastUpdated.Time.Format(time.RFC3339Nano)).
+					Str("mustBeAfter", mustBeAfter.Format(time.RFC3339Nano)).
+					Msgf("Removing failed or completed schedule '%s'", schedule.Name)
+
+				err := client.KubecostV1alpha1().TurndownSchedules().Delete(context.TODO(), schedule.Name, v1.DeleteOptions{})
+				if err != nil {
+					log.Err(err).Msgf("Failed to delete TurndownSchedule '%s'", schedule.Name)
+					continue
+				}
 			}
 		}
 	}

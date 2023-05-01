@@ -77,6 +77,10 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 	defer ts.lock.Unlock()
 
 	if ts.schedule != nil {
+		ts.log.Error().
+			Str("attempted", fmt.Sprintf("%+v", schedule)).
+			Str("existing", fmt.Sprintf("%+v", ts.schedule)).
+			Msg("Failed to scheduled turndown by schedule. A schedule already exists.")
 		return fmt.Errorf("Currently, only a single turndown schedule is allowed.")
 	}
 
@@ -120,7 +124,8 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 		scaleDownID, err = ts.scheduler.ScheduleWithID(schedule.ScaleDownID, downTime, ts.scaleDown, downMeta)
 		if err != nil {
 			ts.store.Clear()
-			return err
+			log.Debug().Msgf("Store cleared in scale down failure")
+			return fmt.Errorf("scheduling scale down with ID '%s': %w", schedule.ScaleDownID, err)
 		}
 	}
 
@@ -128,12 +133,15 @@ func (ts *TurndownScheduler) ScheduleTurndownBySchedule(schedule *Schedule) erro
 	if err != nil {
 		if scaleDownID != "" {
 			ts.scheduler.Cancel(scaleDownID)
+			log.Debug().Msgf("Canceling scale down ID '%s' due to failed scale up with ID '%s'", scaleDownID, schedule.ScaleUpID)
 		}
 		ts.store.Clear()
-		return err
+		log.Debug().Msgf("Store cleared in scale up failure")
+		return fmt.Errorf("scheduling scale up with ID '%s': %w", schedule.ScaleUpID, err)
 	}
 
 	ts.schedule = schedule
+	log.Trace().Msgf("Updated schedule: %+v", ts.schedule)
 
 	return nil
 }
@@ -197,14 +205,19 @@ func (ts *TurndownScheduler) ScheduleTurndown(from time.Time, to time.Time, repe
 
 	// Already a turndown schedule
 	if ts.schedule != nil {
-		ts.log.Error().Msg("Failed to scheduled turndown. Schedule already exists.")
+		ts.log.Error().
+			Str("from", from.Format(time.RFC3339Nano)).
+			Str("to", to.Format(time.RFC3339Nano)).
+			Str("repeatType", repeatType).
+			Str("existingschedule", fmt.Sprintf("%+v", ts.schedule)).
+			Msg("Failed to schedule turndown. A schedule already exists.")
 		return nil, fmt.Errorf("Currently, only a single turndown schedule is allowed.")
 	}
 
 	err := validateSchedule(from, to, &repeatType)
 	if err != nil {
 		ts.log.Error().Msgf("Failed to validate schedule: %s", err.Error())
-		return nil, err
+		return nil, fmt.Errorf("validating schedule: %w", err)
 	}
 
 	// Schedule the turndown
@@ -214,7 +227,7 @@ func (ts *TurndownScheduler) ScheduleTurndown(from time.Time, to time.Time, repe
 	}
 	scaleDownID, err := ts.scheduler.Schedule(from, ts.scaleDown, scaleDownMeta)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scheduling scale down: %w", err)
 	}
 
 	// Schedule turnup
@@ -235,7 +248,9 @@ func (ts *TurndownScheduler) ScheduleTurndown(from time.Time, to time.Time, repe
 		ScaleUpMetadata:   scaleUpMeta,
 	}
 
-	ts.store.Create(ts.schedule)
+	if err := ts.store.Create(ts.schedule); err != nil {
+		ts.log.Error().Err(err).Msgf("Failed to create schedule in store after scheduling scale up and scale down. Schedule: %+v", ts.schedule)
+	}
 
 	ts.log.Info().Msgf("Schedule Created: %+v", ts.schedule)
 
@@ -323,6 +338,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 	if err != nil {
 		// Schedule is written, this is simply waiting on the pod to move nodes, so we just ignore any rescheduling
 		if err.Error() == "EnvironmentPrepare" || err.Error() == "Cancelled" {
+			ts.log.Trace().Msgf("Job complete handler has an acceptable error '%s', noop", err.Error())
 			return
 		}
 
@@ -340,7 +356,6 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 			TurndownJobType:   TurndownJobTypeReset,
 			TurndownJobRepeat: TurndownJobRepeatNone,
 		})
-
 		if err != nil {
 			ts.log.Error().Msgf("Failed to create reset job: %s", err.Error())
 		}
@@ -397,6 +412,7 @@ func (ts *TurndownScheduler) onJobCompleted(id string, scheduled time.Time, meta
 	}
 
 	ts.store.Update(ts.schedule)
+	ts.log.Trace().Msgf("Updated store with new schedule %+v", ts.schedule)
 }
 
 func (ts *TurndownScheduler) scaleDown() error {
