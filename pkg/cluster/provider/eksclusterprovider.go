@@ -12,9 +12,14 @@ import (
 	"github.com/kubecost/cluster-turndown/v2/pkg/cluster/helper"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/eks"
+	"github.com/aws/aws-sdk-go/service/sts"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -495,12 +500,27 @@ func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, er
 		log.Warn().Msgf("Failed to load valid access key from secret. Err=%s", err)
 	}
 
+	// From gist: https://gist.github.com/stormcat24/e8172b4130776e486f2758508eb4f3aa
+	sess := session.Must(session.NewSession())
 	c := aws.NewConfig().
-		WithRegion(region).
-		WithCredentialsChainVerboseErrors(true)
+		WithCredentialsChainVerboseErrors(true).
+		WithCredentials(credentials.NewChainCredentials([]credentials.Provider{
+			&credentials.EnvProvider{},
+			&credentials.SharedCredentialsProvider{},
+			// Required for IRSA
+			stscreds.NewWebIdentityRoleProvider(
+				sts.New(sess),
+				os.Getenv("AWS_ROLE_ARN"),
+				"",
+				os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"),
+			),
+			&ec2rolecreds.EC2RoleProvider{
+				Client: ec2metadata.New(sess),
+			},
+		}))
 
-	clusterManager := eks.New(session.New(c))
-	asgManager := autoscaling.New(session.New(c))
+	clusterManager := eks.New(session.Must(session.NewSession(c)))
+	asgManager := autoscaling.New(session.Must(session.NewSession(c)))
 
 	return clusterManager, asgManager, nil
 }
