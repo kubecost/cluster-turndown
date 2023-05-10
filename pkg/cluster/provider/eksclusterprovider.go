@@ -85,7 +85,7 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 	region := findAWSRegion(kubernetes)
 	clusterManager, asgManager, err := newEKSClusterManager(region)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating EKS cluster manager: %w", err)
 	}
 
 	cp := &EKSClusterProvider{
@@ -99,7 +99,7 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 
 	err = cp.initClusterData()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("initializing cluster data: %w", err)
 	}
 
 	return cp, nil
@@ -168,7 +168,7 @@ func (p *EKSClusterProvider) GetNodePools() ([]NodePool, error) {
 			NodegroupName: ngName,
 		})
 		if err != nil {
-			return nodePools, err
+			return nodePools, fmt.Errorf("describing node group input for cluster '%s' group '%s': %w", p.clusterData.ClusterName, *ngName, err)
 		}
 
 		nodeGroup := ngResp.Nodegroup
@@ -178,7 +178,7 @@ func (p *EKSClusterProvider) GetNodePools() ([]NodePool, error) {
 		})
 
 		if err != nil {
-			return nodePools, err
+			return nodePools, fmt.Errorf("describing ASGs: %w", err)
 		}
 
 		asg := asgResp.AutoScalingGroups[0]
@@ -514,14 +514,16 @@ func (p *EKSClusterProvider) initClusterData() error {
 
 	currentNode, err := p.kubernetes.CoreV1().Nodes().Get(context.TODO(), currentNodeName, metav1.GetOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("getting current node: %w", err)
 	}
 
 	nodePoolName, _, instanceID := eksInstanceInfoFor(currentNode)
 
+	// TODO: Should we set up paging properly? This won't be able to find some
+	// clusters if the user has > 100 clusters according to the parameter docs.
 	clustersResp, err := p.clusterManager.ListClusters(&eks.ListClustersInput{})
 	if err != nil {
-		return err
+		return fmt.Errorf("listing clusters: %w", err)
 	}
 
 	var (
@@ -536,7 +538,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 			NodegroupName: aws.String(nodePoolName),
 		})
 		if err != nil || nodeGroupResp.Nodegroup == nil {
-			log.Info().Msgf("Could not find NodeGroup: %s in Cluster: %s", nodePoolName, cName)
+			log.Info().Err(err).Msgf("Could not find NodeGroup '%s' in Cluster '%s'", nodePoolName, cName)
 			continue
 		}
 
@@ -557,7 +559,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 		Name: clusterName,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("describing cluster '%s': %w", *clusterName, err)
 	}
 
 	p.clusterData = &EKSClusterData{

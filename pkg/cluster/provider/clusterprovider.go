@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"cloud.google.com/go/compute/metadata"
@@ -75,7 +76,7 @@ func NewClusterProvider(client kubernetes.Interface) (ClusterProvider, error) {
 
 	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 
 	if len(nodes.Items) == 0 {

@@ -1011,13 +1011,13 @@ func loadAWSAccessKey(keyFile string) (*AWSAccessKeyFile, error) {
 
 	result, err := ioutil.ReadFile(keyFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading key file '%s': %w", keyFile, err)
 	}
 
 	var ak AWSAccessKeyFile
 	err = json.Unmarshal(result, &ak)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshaling key file '%s' contents: %w", keyFile, err)
 	}
 
 	if ak.AccessKeyID == "" || ak.SecretAccessKey == "" {
