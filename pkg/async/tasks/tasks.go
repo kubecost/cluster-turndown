@@ -252,6 +252,7 @@ func (se *SerialExecutor) Execute() error {
 		for task := range tasks {
 			// Update the current task
 			se.updateCurrent(task)
+			log.Debug().Msgf("Updated current task with description: %s", task.Description())
 
 			// Execute task. If an error occurs, we'll divert
 			// the remaining tasks to a new TaskQueue, set
