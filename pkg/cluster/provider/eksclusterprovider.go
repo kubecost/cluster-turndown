@@ -173,15 +173,22 @@ func (p *EKSClusterProvider) GetNodePools() ([]NodePool, error) {
 
 		nodeGroup := ngResp.Nodegroup
 
-		asgResp, err := p.asgManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
-			AutoScalingGroupNames: []*string{nodeGroup.Resources.AutoScalingGroups[0].Name},
-		})
-
-		if err != nil {
-			return nodePools, fmt.Errorf("describing ASGs: %w", err)
+		autoScalingGroupNames := []*string{}
+		if nodeGroup != nil && nodeGroup.Resources != nil && len(nodeGroup.Resources.AutoScalingGroups) > 0 {
+			autoScalingGroupNames = append(autoScalingGroupNames, nodeGroup.Resources.AutoScalingGroups[0].Name)
 		}
 
-		asg := asgResp.AutoScalingGroups[0]
+		asgResp, err := p.asgManager.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{
+			AutoScalingGroupNames: autoScalingGroupNames,
+		})
+		if err != nil {
+			return nodePools, fmt.Errorf("describing ASGs %+v: %w", autoScalingGroupNames, err)
+		}
+
+		var asg *autoscaling.Group
+		if len(asgResp.AutoScalingGroups) > 0 {
+			asg = asgResp.AutoScalingGroups[0]
+		}
 
 		nodePools = append(nodePools, &EKSNodePool{
 			ng:   nodeGroup,
