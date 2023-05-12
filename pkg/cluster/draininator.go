@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -50,7 +49,7 @@ func NewDraininator(client kubernetes.Interface, node string, ignorePods []strin
 		node:   node,
 		// Aggressive defaults for now
 		gracePeriodSeconds: 30,
-		timeout:            time.Duration(math.MaxInt64),
+		timeout:            20 * time.Minute,
 		force:              true,
 		deleteLocalData:    true,
 		ignoreDaemonSets:   true,
@@ -64,12 +63,12 @@ func (d *Draininator) Drain() error {
 	d.log.Info().Msgf("Draining Node: %s", d.node)
 	err := d.CordonNode()
 	if err != nil {
-		return err
+		return fmt.Errorf("cordoning node '%s': %w", d.node, err)
 	}
 
 	err = d.DeletePodsOnNode()
 	if err != nil {
-		return err
+		return fmt.Errorf("deleting Pods on node '%s': %w", d.node, err)
 	}
 
 	d.log.Info().Msgf("Node: %s was Drained Successfully", d.node)
@@ -99,7 +98,7 @@ func (d *Draininator) CordonNode() error {
 func (d *Draininator) DeletePodsOnNode() error {
 	pods, err := d.podsToDelete()
 	if err != nil {
-		return err
+		return fmt.Errorf("retrieving pods to delete: %w", err)
 	}
 
 	if pods == nil || len(pods) == 0 {
@@ -111,7 +110,7 @@ func (d *Draininator) DeletePodsOnNode() error {
 
 	policyGroupVersion, err := IsEvictionAvailable(d.client)
 	if err != nil {
-		return err
+		return fmt.Errorf("checking if eviction is available: %w", err)
 	}
 
 	// Evict if the API is available
@@ -138,7 +137,7 @@ func (d *Draininator) podsToDelete() ([]v1.Pod, error) {
 	}
 	allPods, err := d.client.CoreV1().Pods(metav1.NamespaceAll).List(context.TODO(), listOptions)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("listing all Pods: %w", err)
 	}
 
 	var podsToDelete []v1.Pod
@@ -316,18 +315,20 @@ func (d *Draininator) deletePods(pods []v1.Pod) error {
 	wc.Add(len(pods))
 
 	for _, pod := range pods {
-		err := d.client.CoreV1().Pods(pod.Namespace).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{
+		d.log.Debug().Msgf("  Deleting Pod %s.%s", pod.Namespace, pod.Name)
+		deleteContext, deleteCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer deleteCancel()
+		err := d.client.CoreV1().Pods(pod.Namespace).Delete(deleteContext, pod.Name, metav1.DeleteOptions{
 			GracePeriodSeconds: &d.gracePeriodSeconds,
 		})
 		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
+			return fmt.Errorf("deleting Pod '%s.%s': %w", pod.Namespace, pod.Name, err)
 		}
 
 		go func(p v1.Pod) {
 			defer wc.Done()
 
 			err := helper.WaitUntilPodDeleted(d.client, p, 5*time.Second, globalTimeout)
-
 			if err != nil {
 				d.log.Error().Msgf("Failed to wait for pod deletion: %s", err.Error())
 			} else {

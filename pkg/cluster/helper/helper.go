@@ -77,7 +77,10 @@ func NodePtr(n v1.Node) *v1.Node {
 // Waits until a specific pod is deleted/evicted.
 func WaitUntilPodDeleted(client kubernetes.Interface, pod v1.Pod, interval, timeout time.Duration) error {
 	return wait.PollImmediate(interval, timeout, func() (bool, error) {
-		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(context.TODO(), pod.Name, metav1.GetOptions{})
+		// TODO: Should we use a different timeout?
+		context, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		testPod, err := client.CoreV1().Pods(pod.Namespace).Get(context, pod.Name, metav1.GetOptions{})
 		if k8serrors.IsNotFound(err) || (testPod != nil && testPod.ObjectMeta.UID != pod.ObjectMeta.UID) {
 			return true, nil
 		}
