@@ -398,9 +398,9 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 
 			err = helper.WaitUntilPodDeleted(d.client, pod, 5*time.Second, globalTimeout)
 			if err != nil {
-				d.log.Error().Msgf("Failed to wait for pod deletion: %s", err.Error())
+				d.log.Error().Msgf("Failed to wait for pod eviction: %s", err.Error())
 			} else {
-				d.log.Info().Msgf("  Pod %s.%s is deleted.", pod.Namespace, pod.Name)
+				d.log.Info().Msgf("  Pod %s.%s is evicted.", pod.Namespace, pod.Name)
 			}
 		}(p)
 	}
@@ -409,6 +409,6 @@ func (d *Draininator) evictPods(pods []v1.Pod, policyGroupVersion string) error 
 	case <-wc.Wait():
 		return nil
 	case <-time.After(globalTimeout):
-		return fmt.Errorf("Timed out while attempting to delete pods.")
+		return fmt.Errorf("Timed out while attempting to evict pods.")
 	}
 }
