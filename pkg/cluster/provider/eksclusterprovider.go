@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/eks"
 
 	v1 "k8s.io/api/core/v1"
@@ -58,10 +59,11 @@ func (np *EKSNodePool) IsMaster() bool          { return false }
 
 // EKSClusterData is used to store cluster specific data
 type EKSClusterData struct {
-	ClusterName string
-	NodeRole    string
-	SubnetIDs   []string
-	Cluster     *eks.Cluster
+	ClusterName       string
+	NodeRole          string
+	SubnetIDs         []string
+	AvailabilityZones []string
+	Cluster           *eks.Cluster
 }
 
 // ClusterProvider implementation for EKS
@@ -69,6 +71,7 @@ type EKSClusterProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *eks.EKS
 	asgManager     *autoscaling.AutoScaling
+	ec2Manager     *ec2.EC2
 	ClusterData    *EKSClusterData
 	log            zerolog.Logger
 
@@ -83,7 +86,7 @@ type EKSClusterProvider struct {
 // NewEKSClusterProvider creates a new EKSClusterProvider instance as the ClusterProvider
 func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, error) {
 	region := findAWSRegion(kubernetes)
-	clusterManager, asgManager, err := newEKSClusterManager(region)
+	clusterManager, asgManager, ec2Manager, err := newEKSClusterManager(region)
 	if err != nil {
 		return nil, fmt.Errorf("creating EKS cluster manager: %w", err)
 	}
@@ -92,6 +95,7 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 		kubernetes:     kubernetes,
 		clusterManager: clusterManager,
 		asgManager:     asgManager,
+		ec2Manager:     ec2Manager,
 		npLock:         new(sync.RWMutex),
 		nodePools:      []*EKSNodePool{},
 		log:            log.With().Str("component", "EKSClusterProvider").Logger(),
@@ -493,7 +497,7 @@ func (p *EKSClusterProvider) DeleteTags(c context.Context, nodePool NodePool, ke
 }
 
 // Creates a new EKS based cluster manager API to execute cluster commands
-func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, error) {
+func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, *ec2.EC2, error) {
 	accessKey, err := loadAWSAccessKey(AWSAccessKey)
 	if err == nil {
 		os.Setenv(AWSAccessKeyID, accessKey.AccessKeyID)
@@ -508,8 +512,9 @@ func newEKSClusterManager(region string) (*eks.EKS, *autoscaling.AutoScaling, er
 
 	clusterManager := eks.New(session.New(c))
 	asgManager := autoscaling.New(session.New(c))
+	ec2Manager := ec2.New(session.New(c))
 
-	return clusterManager, asgManager, nil
+	return clusterManager, asgManager, ec2Manager, nil
 }
 
 // initClusterData looks up specific cluster data for use with all EKS APIs.
@@ -569,11 +574,34 @@ func (p *EKSClusterProvider) initClusterData() error {
 		return fmt.Errorf("describing cluster '%s': %w", *clusterName, err)
 	}
 
+	uniqueAZs := map[string]struct{}{}
+	subnetResp, err := p.ec2Manager.DescribeSubnets(&ec2.DescribeSubnetsInput{
+		SubnetIds: dcr.Cluster.ResourcesVpcConfig.SubnetIds,
+	})
+	if err != nil {
+		return fmt.Errorf("describing the subnets of cluster '%s': %w", *clusterName, err)
+	}
+	if subnetResp == nil {
+		return fmt.Errorf("describing subnets of cluster '%s' had empty response", *clusterName)
+	}
+	for _, subnet := range subnetResp.Subnets {
+		if subnet == nil || subnet.AvailabilityZone == nil {
+			continue
+		}
+		uniqueAZs[*subnet.AvailabilityZone] = struct{}{}
+	}
+
+	azs := []string{}
+	for az := range uniqueAZs {
+		azs = append(azs, az)
+	}
+
 	p.ClusterData = &EKSClusterData{
-		ClusterName: aws.StringValue(clusterName),
-		NodeRole:    nodeRole,
-		SubnetIDs:   aws.StringValueSlice(dcr.Cluster.ResourcesVpcConfig.SubnetIds),
-		Cluster:     dcr.Cluster,
+		ClusterName:       aws.StringValue(clusterName),
+		NodeRole:          nodeRole,
+		SubnetIDs:         aws.StringValueSlice(dcr.Cluster.ResourcesVpcConfig.SubnetIds),
+		AvailabilityZones: azs,
+		Cluster:           dcr.Cluster,
 	}
 	return nil
 }
