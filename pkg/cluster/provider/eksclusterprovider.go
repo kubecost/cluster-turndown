@@ -69,7 +69,7 @@ type EKSClusterProvider struct {
 	kubernetes     kubernetes.Interface
 	clusterManager *eks.EKS
 	asgManager     *autoscaling.AutoScaling
-	clusterData    *EKSClusterData
+	ClusterData    *EKSClusterData
 	log            zerolog.Logger
 
 	// Getting a list of node pools can be somewhat expensive for EKS
@@ -108,7 +108,7 @@ func NewEKSClusterProvider(kubernetes kubernetes.Interface) (ClusterProvider, er
 // IsNodePool determines if there is a node pool with the name or not.
 func (p *EKSClusterProvider) IsNodePool(name string) bool {
 	resp, err := p.clusterManager.DescribeNodegroup(&eks.DescribeNodegroupInput{
-		ClusterName:   aws.String(p.clusterData.ClusterName),
+		ClusterName:   aws.String(p.ClusterData.ClusterName),
 		NodegroupName: aws.String(name),
 	})
 
@@ -156,7 +156,7 @@ func (p *EKSClusterProvider) GetNodePools() ([]NodePool, error) {
 	nodePools := []NodePool{}
 
 	ngNames, err := p.clusterManager.ListNodegroups(&eks.ListNodegroupsInput{
-		ClusterName: aws.String(p.clusterData.ClusterName),
+		ClusterName: aws.String(p.ClusterData.ClusterName),
 	})
 	if err != nil {
 		return nodePools, err
@@ -164,11 +164,11 @@ func (p *EKSClusterProvider) GetNodePools() ([]NodePool, error) {
 
 	for _, ngName := range ngNames.Nodegroups {
 		ngResp, err := p.clusterManager.DescribeNodegroup(&eks.DescribeNodegroupInput{
-			ClusterName:   aws.String(p.clusterData.ClusterName),
+			ClusterName:   aws.String(p.ClusterData.ClusterName),
 			NodegroupName: ngName,
 		})
 		if err != nil {
-			return nodePools, fmt.Errorf("describing node group input for cluster '%s' group '%s': %w", p.clusterData.ClusterName, *ngName, err)
+			return nodePools, fmt.Errorf("describing node group input for cluster '%s' group '%s': %w", p.ClusterData.ClusterName, *ngName, err)
 		}
 
 		nodeGroup := ngResp.Nodegroup
@@ -228,11 +228,11 @@ func (p *EKSClusterProvider) CreateNodePool(c context.Context, name, machineType
 	}
 
 	_, err := p.clusterManager.CreateNodegroupWithContext(c, &eks.CreateNodegroupInput{
-		ClusterName:   aws.String(p.clusterData.ClusterName),
-		NodeRole:      aws.String(p.clusterData.NodeRole),
+		ClusterName:   aws.String(p.ClusterData.ClusterName),
+		NodeRole:      aws.String(p.ClusterData.NodeRole),
 		NodegroupName: aws.String(name),
 		InstanceTypes: aws.StringSlice([]string{machineType}),
-		Subnets:       aws.StringSlice(p.clusterData.SubnetIDs),
+		Subnets:       aws.StringSlice(p.ClusterData.SubnetIDs),
 		DiskSize:      aws.Int64(int64(diskSizeGB)),
 		Labels:        aws.StringMap(labels),
 		ScalingConfig: &eks.NodegroupScalingConfig{
@@ -248,7 +248,7 @@ func (p *EKSClusterProvider) CreateNodePool(c context.Context, name, machineType
 	// Instead of our kubernetes helper here, we can utilize the aws client to wait for the nodegroup to be
 	// active
 	return p.clusterManager.WaitUntilNodegroupActiveWithContext(c, &eks.DescribeNodegroupInput{
-		ClusterName:   aws.String(p.clusterData.ClusterName),
+		ClusterName:   aws.String(p.ClusterData.ClusterName),
 		NodegroupName: aws.String(name),
 	})
 }
@@ -263,11 +263,11 @@ func (p *EKSClusterProvider) CreateAutoScalingNodePool(c context.Context, name, 
 	}
 
 	_, err := p.clusterManager.CreateNodegroupWithContext(c, &eks.CreateNodegroupInput{
-		ClusterName:   aws.String(p.clusterData.ClusterName),
-		NodeRole:      aws.String(p.clusterData.NodeRole),
+		ClusterName:   aws.String(p.ClusterData.ClusterName),
+		NodeRole:      aws.String(p.ClusterData.NodeRole),
 		NodegroupName: aws.String(name),
 		InstanceTypes: aws.StringSlice([]string{machineType}),
-		Subnets:       aws.StringSlice(p.clusterData.SubnetIDs),
+		Subnets:       aws.StringSlice(p.ClusterData.SubnetIDs),
 		DiskSize:      aws.Int64(int64(diskSizeGB)),
 		Labels:        aws.StringMap(labels),
 		ScalingConfig: &eks.NodegroupScalingConfig{
@@ -283,7 +283,7 @@ func (p *EKSClusterProvider) CreateAutoScalingNodePool(c context.Context, name, 
 
 	// Wait for the nodegroup to be active
 	return p.clusterManager.WaitUntilNodegroupActiveWithContext(c, &eks.DescribeNodegroupInput{
-		ClusterName:   aws.String(p.clusterData.ClusterName),
+		ClusterName:   aws.String(p.ClusterData.ClusterName),
 		NodegroupName: aws.String(name),
 	})
 }
@@ -569,7 +569,7 @@ func (p *EKSClusterProvider) initClusterData() error {
 		return fmt.Errorf("describing cluster '%s': %w", *clusterName, err)
 	}
 
-	p.clusterData = &EKSClusterData{
+	p.ClusterData = &EKSClusterData{
 		ClusterName: aws.StringValue(clusterName),
 		NodeRole:    nodeRole,
 		SubnetIDs:   aws.StringValueSlice(dcr.Cluster.ResourcesVpcConfig.SubnetIds),
