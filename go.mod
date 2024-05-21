@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go v0.54.0
-	github.com/aws/aws-sdk-go v1.28.7
+	github.com/aws/aws-sdk-go v1.34.0
 	github.com/google/uuid v1.1.2
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/rs/zerolog v1.28.0
