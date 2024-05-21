@@ -3,13 +3,15 @@ module github.com/kubecost/cluster-turndown/v2
 go 1.16
 
 require (
-	cloud.google.com/go v0.54.0
+	cloud.google.com/go v0.113.0 // indirect
+	cloud.google.com/go/compute/metadata v0.3.0
+	cloud.google.com/go/container v1.35.0
 	github.com/aws/aws-sdk-go v1.28.7
-	github.com/google/uuid v1.1.2
+	github.com/google/uuid v1.6.0
 	github.com/imdario/mergo v0.3.8 // indirect
 	github.com/rs/zerolog v1.28.0
-	google.golang.org/genproto v0.0.0-20201019141844-1ed22bb0c154
-	google.golang.org/grpc v1.27.1
+	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda
+	google.golang.org/grpc v1.63.2
 	k8s.io/api v0.20.4
 	k8s.io/apimachinery v0.20.4
 	k8s.io/client-go v0.20.4
