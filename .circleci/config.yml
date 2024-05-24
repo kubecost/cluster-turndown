@@ -2,9 +2,9 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/golang:latest
+      - image: cimg/go:1.22.3
 
-    working_directory: /go/src/github.com/kubecost/cluster-turndown
+    working_directory: /home/circleci/go/src/github.com/kubecost/cluster-turndown
     steps:
       - checkout
       - run: go get -v -t -d ./...
