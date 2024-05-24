@@ -1,0 +1,38 @@
+name: PR - build, test
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 'stable'
+          check-latest: true
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+            path: './cluster-turndown'
+      - name: Go Mod Cache
+        uses: actions/cache@v3
+        with:
+            path: |
+              ~/.cache/go-build
+              ~/go/pkg/mod
+            key: ${{ runner.os }}-go-${{ hashFiles('./cluster-turndown/**/go.sum')}}
+      - name: Test Cluster Turndown
+        run: |
+          cd ./cluster-turndown
+          go get -v -t -d ./...
+          go test -v ./...
+      - name: Build Cluster Turndown
+        run: |
+          cd ./cluster-turndown
+          go build ./cmd/turndown/main.go
+
