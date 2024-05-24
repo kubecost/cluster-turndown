@@ -1,6 +1,7 @@
 module github.com/kubecost/cluster-turndown/v2
 
 go 1.22.3
+toolchain go1.22.3
 
 require (
 	cloud.google.com/go/compute/metadata v0.2.3
