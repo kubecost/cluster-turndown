@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -170,7 +169,7 @@ func (dss *DiskScheduleStore) GetSchedule() (*Schedule, error) {
 		return nil, fmt.Errorf("No schedule exists")
 	}
 
-	data, err := ioutil.ReadFile(dss.file)
+	data, err := os.ReadFile(dss.file)
 	if err != nil {
 		return nil, fmt.Errorf("No schedule exists")
 	}
@@ -195,7 +194,7 @@ func (dss *DiskScheduleStore) Update(schedule *Schedule) error {
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(dss.file, data, 0644)
+	err = os.WriteFile(dss.file, data, 0644)
 	if err != nil {
 		return err
 	}
