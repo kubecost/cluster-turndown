@@ -23,7 +23,7 @@ The parameters to supply the script are as follows:
 
 ### EKS & AWS kops Setup
 
-For EKS cluster provisioning, if using `eksctl`, make sure that you use the `--managed` option when creating the cluster. Unmanaged nodegroups should be upgraded to managed. [More info](https://eksctl.io/usage/eks-managed-nodes/). 
+For EKS cluster provisioning, if using `eksctl`, make sure that you use the `--managed` option when creating the cluster. Unmanaged nodegroups should be upgraded to managed. Learn more in eksctl's [EKS managed nodegroups](https://eksctl.io/usage/nodegroup-managed/) doc. 
 
 Create a new User or IAM role with **AutoScalingFullAccess** permissions. 
 
