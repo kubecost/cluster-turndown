@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.32.0
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.64.0
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/client-go v0.30.2
