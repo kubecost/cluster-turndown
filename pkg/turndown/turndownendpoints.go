@@ -10,23 +10,14 @@ import (
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule/v1alpha1"
 	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
-	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 
 	"github.com/opencost/opencost/core/pkg/log"
 	proto "github.com/opencost/opencost/core/pkg/protocol"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
 )
 
 var protocol = proto.HTTP()
-
-// DataEnvelope is a generic wrapper struct for http response data
-type DataEnvelope struct {
-	Code   int         `json:"code"`
-	Status string      `json:"status"`
-	Data   interface{} `json:"data"`
-}
 
 // ScheduleTurndownRequest is the POST encoding used to
 type ScheduleTurndownRequest struct {
@@ -36,26 +27,20 @@ type ScheduleTurndownRequest struct {
 }
 
 type TurndownEndpoints struct {
-	kubeClient kubernetes.Interface
-	client     clientset.Interface
-	scheduler  *TurndownScheduler
-	turndown   TurndownManager
-	provider   provider.TurndownProvider
+	client    clientset.Interface
+	scheduler *TurndownScheduler
+	turndown  TurndownManager
 }
 
 func NewTurndownEndpoints(
-	kubeClient kubernetes.Interface,
 	client clientset.Interface,
 	scheduler *TurndownScheduler,
-	turndown TurndownManager,
-	provider provider.TurndownProvider) *TurndownEndpoints {
+	turndown TurndownManager) *TurndownEndpoints {
 
 	return &TurndownEndpoints{
-		kubeClient: kubeClient,
-		client:     client,
-		scheduler:  scheduler,
-		turndown:   turndown,
-		provider:   provider,
+		client:    client,
+		scheduler: scheduler,
+		turndown:  turndown,
 	}
 }
 
@@ -64,6 +49,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 
 	if r.Method == http.MethodGet {
 		schedule := te.scheduler.GetSchedule()
+		log.Infof("get request")
 
 		marshaled, err := json.Marshal(schedule)
 		if err != nil {
