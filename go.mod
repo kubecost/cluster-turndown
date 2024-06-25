@@ -3,7 +3,7 @@ module github.com/kubecost/cluster-turndown/v2
 go 1.22.3
 
 require (
-	cloud.google.com/go/compute/metadata v0.2.3
+	cloud.google.com/go/compute/metadata v0.3.0
 	cloud.google.com/go/container v1.35.0
 	github.com/aws/aws-sdk-go v1.51.16
 	github.com/google/uuid v1.6.0
@@ -19,7 +19,6 @@ require (
 )
 
 require (
-	cloud.google.com/go/compute v1.25.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.0 // indirect
 	github.com/evanphx/json-patch v5.9.0+incompatible // indirect
