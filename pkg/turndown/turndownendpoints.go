@@ -4,27 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/kubecost/cluster-turndown/v2/pkg/apis/turndownschedule/v1alpha1"
 	clientset "github.com/kubecost/cluster-turndown/v2/pkg/generated/clientset/versioned"
-	"github.com/kubecost/cluster-turndown/v2/pkg/turndown/provider"
 
+	"github.com/opencost/opencost/core/pkg/log"
+	proto "github.com/opencost/opencost/core/pkg/protocol"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/rs/zerolog/log"
 )
 
-// DataEnvelope is a generic wrapper struct for http response data
-type DataEnvelope struct {
-	Code   int         `json:"code"`
-	Status string      `json:"status"`
-	Data   interface{} `json:"data"`
-}
+var protocol = proto.HTTP()
 
 // ScheduleTurndownRequest is the POST encoding used to
 type ScheduleTurndownRequest struct {
@@ -34,26 +27,20 @@ type ScheduleTurndownRequest struct {
 }
 
 type TurndownEndpoints struct {
-	kubeClient kubernetes.Interface
-	client     clientset.Interface
-	scheduler  *TurndownScheduler
-	turndown   TurndownManager
-	provider   provider.TurndownProvider
+	client    clientset.Interface
+	scheduler *TurndownScheduler
+	turndown  TurndownManager
 }
 
 func NewTurndownEndpoints(
-	kubeClient kubernetes.Interface,
 	client clientset.Interface,
 	scheduler *TurndownScheduler,
-	turndown TurndownManager,
-	provider provider.TurndownProvider) *TurndownEndpoints {
+	turndown TurndownManager) *TurndownEndpoints {
 
 	return &TurndownEndpoints{
-		kubeClient: kubeClient,
-		client:     client,
-		scheduler:  scheduler,
-		turndown:   turndown,
-		provider:   provider,
+		client:    client,
+		scheduler: scheduler,
+		turndown:  turndown,
 	}
 }
 
@@ -62,26 +49,28 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 
 	if r.Method == http.MethodGet {
 		schedule := te.scheduler.GetSchedule()
-		if schedule == nil {
-			w.Write(wrapData(struct{}{}, nil))
+
+		marshaled, err := json.Marshal(schedule)
+		if err != nil {
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to marshal result: %s", err)))
 			return
 		}
 
-		w.Write(wrapData(schedule, nil))
+		protocol.WriteData(w, marshaled)
 		return
 	}
 
 	if r.Method == http.MethodPost {
-		data, err := ioutil.ReadAll(r.Body)
+		data, err := io.ReadAll(r.Body)
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.BadRequest(fmt.Sprintf("Failed to read request body: %s", err)))
 			return
 		}
 
 		var request ScheduleTurndownRequest
 		err = json.Unmarshal(data, &request)
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to unmarshal request: %s", err)))
 			return
 		}
 
@@ -92,7 +81,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 		// test to see if there's already a schedule present
 		s := te.scheduler.GetSchedule()
 		if s != nil {
-			w.Write(wrapData(nil, fmt.Errorf("Schedule already exists")))
+			protocol.WriteError(w, protocol.InternalServerError("Schedule already exists"))
 			return
 		}
 
@@ -113,7 +102,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 			},
 			v1.CreateOptions{})
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to create schedule: %s", err)))
 			return
 		}
 
@@ -129,20 +118,21 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 		})
 
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to get schedule: %s", err)))
 			return
 		}
 
-		w.Write(wrapData(schedule, nil))
+		marshaled, err := json.Marshal(schedule)
+		if err != nil {
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to marshal result: %s", err)))
+			return
+		}
+
+		w.Write(marshaled)
 		return
 	}
 
-	resp, _ := json.Marshal(&DataEnvelope{
-		Code:   http.StatusNotFound,
-		Status: "error",
-		Data:   fmt.Sprintf("Not Found for method type: %s", r.Method),
-	})
-	w.Write(resp)
+	protocol.WriteError(w, protocol.NotFound())
 }
 
 func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +140,7 @@ func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http
 
 	scheduleList, err := te.client.KubecostV1alpha1().TurndownSchedules().List(context.TODO(), v1.ListOptions{})
 	if err != nil {
-		w.Write(wrapData(nil, err))
+		protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to list schedules: %s", err)))
 		return
 	}
 
@@ -165,12 +155,10 @@ func (te *TurndownEndpoints) HandleCancelSchedule(w http.ResponseWriter, r *http
 	if toCancel != nil {
 		err = te.client.KubecostV1alpha1().TurndownSchedules().Delete(context.TODO(), toCancel.Name, v1.DeleteOptions{})
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to delete schedule: %s", err)))
 			return
 		}
 	}
-
-	w.Write(wrapData("", nil))
 }
 
 func (te *TurndownEndpoints) HandleInitEnvironment(w http.ResponseWriter, r *http.Request) {
@@ -179,41 +167,17 @@ func (te *TurndownEndpoints) HandleInitEnvironment(w http.ResponseWriter, r *htt
 
 	isOnNode, err := te.turndown.IsRunningOnTurndownNode()
 	if nil != err {
-		w.Write(wrapData(nil, err))
+		protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to list nodes: %s", err)))
 		return
 	}
 
 	if !isOnNode {
 		err := te.turndown.PrepareTurndownEnvironment()
 		if err != nil {
-			w.Write(wrapData(nil, err))
+			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to prepare turndown environment: %s", err)))
 			return
 		}
 	} else {
-		log.Info().Msgf("Already running on correct turndown node. No need to setup environment")
+		log.Infof("Already running on correct turndown node. No need to setup environment")
 	}
-
-	w.Write(wrapData("", nil))
-}
-
-func wrapData(data interface{}, err error) []byte {
-	var resp []byte
-
-	if err != nil {
-		log.Error().Msgf("Error returned to client: %s", err.Error())
-		resp, _ = json.Marshal(&DataEnvelope{
-			Code:   http.StatusInternalServerError,
-			Status: "error",
-			Data:   err.Error(),
-		})
-	} else {
-		resp, _ = json.Marshal(&DataEnvelope{
-			Code:   http.StatusOK,
-			Status: "success",
-			Data:   data,
-		})
-
-	}
-
-	return resp
 }

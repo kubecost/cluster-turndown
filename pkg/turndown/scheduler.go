@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/rs/zerolog/log"
+	"github.com/opencost/opencost/core/pkg/log"
 )
 
 const (
@@ -176,7 +176,7 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 			if sjs.jobComplete != nil {
 				sjs.jobComplete(job.id, job.next, job.metadata, err)
 			} else if err != nil {
-				log.Error().Msgf("Job failed with error: %s", err.Error())
+				log.Errorf("Job failed with error: %s", err.Error())
 			}
 		}()
 
@@ -186,7 +186,7 @@ func (sjs *SimpleJobScheduler) scheduleJob(ctx context.Context, job *SimpleJob) 
 			err = job.job()
 		case <-ctx.Done():
 			isCancelled = true
-			log.Info().Msgf("Job was cancelled: %s", job.id)
+			log.Infof("Job was cancelled: %s", job.id)
 		}
 	}()
 }

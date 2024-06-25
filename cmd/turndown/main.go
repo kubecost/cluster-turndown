@@ -26,10 +26,10 @@ import (
 )
 
 // Run web server with turndown endpoints
-func runWebServer(kubeClient kubernetes.Interface, client clientset.Interface, scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager, provider provider.TurndownProvider) {
+func runWebServer(client clientset.Interface, scheduler *turndown.TurndownScheduler, manager turndown.TurndownManager) {
 	mux := http.NewServeMux()
 
-	endpoints := turndown.NewTurndownEndpoints(kubeClient, client, scheduler, manager, provider)
+	endpoints := turndown.NewTurndownEndpoints(client, scheduler, manager)
 
 	mux.HandleFunc("/schedule", endpoints.HandleStartSchedule)
 	mux.HandleFunc("/cancel", endpoints.HandleCancelSchedule)
@@ -164,5 +164,5 @@ func main() {
 	runTurndownResourceController(kubeClient, tdClient, scheduler, stopCh)
 
 	// Run Turndown Endpoints
-	runWebServer(kubeClient, tdClient, scheduler, manager, turndownProvider)
+	runWebServer(tdClient, scheduler, manager)
 }
