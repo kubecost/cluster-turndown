@@ -5,7 +5,7 @@ go 1.22.3
 require (
 	cloud.google.com/go/compute/metadata v0.2.3
 	cloud.google.com/go/container v1.35.0
-	github.com/aws/aws-sdk-go v1.51.16
+	github.com/aws/aws-sdk-go v1.54.19
 	github.com/google/uuid v1.6.0
 	github.com/opencost/opencost/core v0.0.0-20240530161925-f362d9681115
 	github.com/rs/zerolog v1.32.0
