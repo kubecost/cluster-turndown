@@ -50,13 +50,7 @@ func (te *TurndownEndpoints) HandleStartSchedule(w http.ResponseWriter, r *http.
 	if r.Method == http.MethodGet {
 		schedule := te.scheduler.GetSchedule()
 
-		marshaled, err := json.Marshal(schedule)
-		if err != nil {
-			protocol.WriteError(w, protocol.InternalServerError(fmt.Sprintf("Failed to marshal result: %s", err)))
-			return
-		}
-
-		protocol.WriteData(w, marshaled)
+		protocol.WriteData(w, schedule)
 		return
 	}
 
