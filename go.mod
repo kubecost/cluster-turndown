@@ -7,7 +7,7 @@ toolchain go1.23.4
 require (
 	cloud.google.com/go/compute/metadata v0.6.0
 	cloud.google.com/go/container v1.42.0
-	github.com/aws/aws-sdk-go v1.55.5
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/google/uuid v1.6.0
 	github.com/opencost/opencost/core v0.0.0-20241216191657-30e5d9a27f41
 	github.com/rs/zerolog v1.34.0
