@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/google/uuid v1.6.0
 	github.com/opencost/opencost/core v0.0.0-20241216191657-30e5d9a27f41
-	github.com/rs/zerolog v1.33.0
+	github.com/rs/zerolog v1.34.0
 	google.golang.org/genproto v0.0.0-20241216192217-9240e9c98484
 	google.golang.org/grpc v1.69.0
 	k8s.io/api v0.32.0
