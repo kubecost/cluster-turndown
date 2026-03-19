@@ -10,7 +10,7 @@ require (
 	github.com/opencost/opencost/core v0.0.0-20241216191657-30e5d9a27f41
 	github.com/rs/zerolog v1.34.0
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822
-	google.golang.org/grpc v1.79.1
+	google.golang.org/grpc v1.79.3
 	k8s.io/api v0.32.0
 	k8s.io/apimachinery v0.32.0
 	k8s.io/client-go v0.32.0
